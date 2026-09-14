@@ -187,9 +187,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Schemas match design canonical detection shape
-- [ ] Empty detections list validates
-- [ ] Unit test constructs sample AnalysisResult with `detections: []`
+- [x] Schemas match design canonical detection shape
+- [x] Empty detections list validates
+- [x] Unit test constructs sample AnalysisResult with `detections: []`
 
 **Tests**: unit
 **Gate**: quick
