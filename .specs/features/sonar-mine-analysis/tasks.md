@@ -364,10 +364,10 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Login happy path returns token
-- [ ] Invalid credentials → 401 `INVALID_CREDENTIALS`
-- [ ] `/auth/me` without token → 401; with token returns `org_id`
-- [ ] Integration tests cover the above (seeded via seed module or test fixtures)
+- [x] Login happy path returns token
+- [x] Invalid credentials → 401 `INVALID_CREDENTIALS`
+- [x] `/auth/me` without token → 401; with token returns `org_id`
+- [x] Integration tests cover the above (seeded via seed module or test fixtures)
 
 **Tests**: integration
 **Gate**: full
