@@ -289,9 +289,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Can create org + user and fetch by username
-- [ ] Username lookup returns `user_id` + `org_id`
-- [ ] Integration tests use moto (or DynamoDB Local) for put/get paths
+- [x] Can create org + user and fetch by username
+- [x] Username lookup returns `user_id` + `org_id`
+- [x] Integration tests use moto (or DynamoDB Local) for put/get paths
 
 **Tests**: integration
 **Gate**: full
