@@ -237,9 +237,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] `Dockerfile` installs project and runs uvicorn
-- [ ] `GET /health` returns 200
-- [ ] Integration test hits `/health` via httpx AsyncClient
+- [x] `Dockerfile` installs project and runs uvicorn
+- [x] `GET /health` returns 200
+- [x] Integration test hits `/health` via httpx AsyncClient
 
 **Tests**: integration
 **Gate**: full
