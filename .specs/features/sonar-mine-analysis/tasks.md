@@ -548,12 +548,12 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Authenticated analyze happy path (fake model) → 200 + schema
-- [ ] Empty detections → 200 + `[]`
-- [ ] Invalid image → 400 no row
-- [ ] Model unavailable → 503 `MODEL_UNAVAILABLE` no row
-- [ ] List/get org isolation + cross-org 404 covered
-- [ ] Integration tests cover the above
+- [x] Authenticated analyze happy path (fake model) → 200 + schema
+- [x] Empty detections → 200 + `[]`
+- [x] Invalid image → 400 no row
+- [x] Model unavailable → 503 `MODEL_UNAVAILABLE` no row
+- [x] List/get org isolation + cross-org 404 covered
+- [x] Integration tests cover the above
 
 **Tests**: integration
 **Gate**: full
