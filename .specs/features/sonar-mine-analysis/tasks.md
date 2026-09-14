@@ -468,9 +468,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Missing model → MODEL_UNAVAILABLE
-- [ ] Fake gateway returns deterministic raw output for tests without TensorFlow
-- [ ] Unit tests cover unavailable + fake predict
+- [x] Missing model → MODEL_UNAVAILABLE
+- [x] Fake gateway returns deterministic raw output for tests without TensorFlow
+- [x] Unit tests cover unavailable + fake predict
 
 **Tests**: unit
 **Gate**: quick
