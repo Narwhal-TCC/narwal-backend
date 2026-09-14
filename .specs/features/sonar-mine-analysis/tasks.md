@@ -520,10 +520,10 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] List returns only caller org
-- [ ] Cross-org get → not found
-- [ ] Empty org list → empty page
-- [ ] Unit tests with fake repos cover isolation + empty list
+- [x] List returns only caller org
+- [x] Cross-org get → not found
+- [x] Empty org list → empty page
+- [x] Unit tests with fake repos cover isolation + empty list
 
 **Tests**: unit
 **Gate**: quick
