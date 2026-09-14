@@ -137,9 +137,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Exceptions exist for INVALID_CREDENTIALS, UNAUTHORIZED, INVALID_IMAGE, MODEL_UNAVAILABLE, INFERENCE_TIMEOUT, STORAGE_ERROR, ANALYSIS_NOT_FOUND
-- [ ] Handler maps them to the correct HTTP statuses from design
-- [ ] Unit tests cover mapping for at least MODEL_UNAVAILABLE → 503 and INVALID_IMAGE → 400
+- [x] Exceptions exist for INVALID_CREDENTIALS, UNAUTHORIZED, INVALID_IMAGE, MODEL_UNAVAILABLE, INFERENCE_TIMEOUT, STORAGE_ERROR, ANALYSIS_NOT_FOUND
+- [x] Handler maps them to the correct HTTP statuses from design
+- [x] Unit tests cover mapping for at least MODEL_UNAVAILABLE → 503 and INVALID_IMAGE → 400
 
 **Tests**: unit
 **Gate**: quick
