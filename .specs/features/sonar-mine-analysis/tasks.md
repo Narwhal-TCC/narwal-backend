@@ -112,9 +112,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] `get_settings()` returns cached Settings
-- [ ] All design env vars represented with safe local defaults where appropriate
-- [ ] Unit test asserts endpoint URL fields load from env
+- [x] `get_settings()` returns cached Settings
+- [x] All design env vars represented with safe local defaults where appropriate
+- [x] Unit test asserts endpoint URL fields load from env
 
 **Tests**: unit
 **Gate**: quick
