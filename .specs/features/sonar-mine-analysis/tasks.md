@@ -576,9 +576,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Lifespan seeds users without crashing when tables/bucket can be created
-- [ ] All routes reachable from one app instance
-- [ ] Integration smoke: login → analyze (fake) → list
+- [x] Lifespan seeds users without crashing when tables/bucket can be created
+- [x] All routes reachable from one app instance
+- [x] Integration smoke: login → analyze (fake) → list
 
 **Tests**: integration
 **Gate**: full
