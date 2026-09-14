@@ -2,3 +2,6 @@
 .vscode/
 .agents/
 .venv/
+__pycache__/
+*.py[cod]
+.env

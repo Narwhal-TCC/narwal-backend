@@ -212,9 +212,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] `minio`, `dynamodb`, and `app` services defined with documented ports
-- [ ] Env vars match design (`S3_ENDPOINT_URL`, `DYNAMODB_ENDPOINT_URL`, `S3_PUBLIC_ENDPOINT`, path-style)
-- [ ] Compose file validates (`docker compose config`)
+- [x] `minio`, `dynamodb`, and `app` services defined with documented ports
+- [x] Env vars match design (`S3_ENDPOINT_URL`, `DYNAMODB_ENDPOINT_URL`, `S3_PUBLIC_ENDPOINT`, path-style)
+- [x] Compose file validates (`docker compose config`)
 
 **Tests**: none
 **Gate**: build
