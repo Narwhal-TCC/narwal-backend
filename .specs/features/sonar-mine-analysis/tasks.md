@@ -339,9 +339,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Valid seeded user yields token
-- [ ] Bad password raises INVALID_CREDENTIALS
-- [ ] Unit tests with fake repo cover both paths
+- [x] Valid seeded user yields token
+- [x] Bad password raises INVALID_CREDENTIALS
+- [x] Unit tests with fake repo cover both paths
 
 **Tests**: unit
 **Gate**: quick
