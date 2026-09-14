@@ -392,9 +392,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Put + get round-trip works under moto/MinIO
-- [ ] Missing model key surfaces as load failure to caller
-- [ ] Integration tests cover put image and missing object
+- [x] Put + get round-trip works under moto/MinIO
+- [x] Missing model key surfaces as load failure to caller
+- [x] Integration tests cover put image and missing object
 
 **Tests**: integration
 **Gate**: full
