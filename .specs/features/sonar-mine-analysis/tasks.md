@@ -493,11 +493,11 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Valid PNG path returns detections (possibly empty) and persists
-- [ ] Oversize/invalid → INVALID_IMAGE and no analysis put
-- [ ] Model unavailable → error and no analysis put
-- [ ] Timeout path returns INFERENCE_TIMEOUT without success payload
-- [ ] Unit tests with fakes cover the four paths above
+- [x] Valid PNG path returns detections (possibly empty) and persists
+- [x] Oversize/invalid → INVALID_IMAGE and no analysis put
+- [x] Model unavailable → error and no analysis put
+- [x] Timeout path returns INFERENCE_TIMEOUT without success payload
+- [x] Unit tests with fakes cover the four paths above
 
 **Tests**: unit
 **Gate**: quick
