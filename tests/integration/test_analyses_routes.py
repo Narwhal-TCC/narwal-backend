@@ -60,6 +60,14 @@ def analyses_client(monkeypatch):
         users.put_user("user-1", "org-1", "operator", hash_password("pw"), "member")
         users.put_org("org-2", "Rival Team")
         users.put_user("user-2", "org-2", "rival", hash_password("pw"), "member")
+        users.put_org("platform", "Platform")
+        users.put_user(
+            "admin-1",
+            "platform",
+            "platform-admin",
+            hash_password("pw"),
+            "platform_admin",
+        )
 
         object_store = S3ObjectStore(bucket=BUCKET)
         object_store.ensure_bucket()
@@ -100,6 +108,12 @@ def post_image(client: TestClient, headers: dict, data: bytes, content_type: str
     )
 
 
+def jpeg_bytes(width: int = 640, height: int = 480) -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (width, height), color=(20, 30, 40)).save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+
 def test_analyze_returns_detections_for_authenticated_member(analyses_client):
     client, _ = analyses_client
     headers = auth_headers(client, "operator")
@@ -122,6 +136,19 @@ def test_analyze_returns_detections_for_authenticated_member(analyses_client):
             "label": "mine",
         }
     ]
+
+
+def test_analyze_accepts_jpeg_and_returns_canonical_detections(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(client, headers, jpeg_bytes(), content_type="image/jpeg")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["image_content_type"] == "image/jpeg"
+    assert body["image_s3_key"].endswith(".jpg")
+    assert body["detections"][0]["confidence"] == 0.9
 
 
 def test_analyze_with_no_detections_returns_empty_list(analyses_client):
@@ -208,3 +235,22 @@ def test_get_analysis_of_another_org_returns_404(analyses_client):
 
     assert response.status_code == 404
     assert response.json()["code"] == "ANALYSIS_NOT_FOUND"
+
+
+def test_platform_admin_cannot_list_or_get_another_org_analyses(analyses_client):
+    client, _ = analyses_client
+    created = post_image(client, auth_headers(client, "operator"), png_bytes()).json()
+    admin_headers = auth_headers(client, "platform-admin")
+
+    listed = client.get("/analyses", headers=admin_headers)
+    assert listed.status_code == 200
+    assert listed.json()["items"] == []
+
+    detail = client.get(f"/analyses/{created['id']}", headers=admin_headers)
+    assert detail.status_code == 404
+    assert detail.json()["code"] == "ANALYSIS_NOT_FOUND"
+
+    admin_created = post_image(client, admin_headers, png_bytes()).json()
+    assert admin_created["org_id"] == "platform"
+    admin_list = client.get("/analyses", headers=admin_headers).json()
+    assert [item["id"] for item in admin_list["items"]] == [admin_created["id"]]

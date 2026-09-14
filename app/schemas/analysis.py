@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 
 
 class Detection(BaseModel):
+    """Axis-aligned box in uploaded-image pixels: half-open ``[x1, x2)`` × ``[y1, y2)``."""
+
     x1: float
     y1: float
     x2: float

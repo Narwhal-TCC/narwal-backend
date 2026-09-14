@@ -5,10 +5,11 @@ from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
 
+import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from app.core.config import get_settings
-from app.core.errors import InferenceTimeoutError, InvalidImageError
+from app.core.errors import InferenceTimeoutError, InvalidImageError, StorageError
 from app.repositories.analyses import AnalysisRepository, new_analysis_id
 from app.repositories.s3_store import S3ObjectStore
 from app.schemas.analysis import AnalysisResult
@@ -40,25 +41,32 @@ class AnalyzeService:
         content_type: str | None,
         data: bytes,
     ) -> AnalysisResult:
-        width, height, image_content_type, ext = self._validate_image(content_type, data)
+        width, height, image_content_type, ext, image_array = self._validate_image(
+            content_type, data
+        )
 
         # Loading happens before any write so a model failure never leaves an analysis behind.
         self.model_gateway.ensure_model_loaded()
         started = time.perf_counter()
-        raw = self._predict_with_timeout(data)
+        raw = self._predict_with_timeout(image_array)
         inference_ms = int((time.perf_counter() - started) * 1000)
 
         detections = to_detections(raw, image_width=width, image_height=height)
 
         analysis_id = new_analysis_id()
         created_at = datetime.now(UTC)
-        image_s3_key = self.object_store.put_analysis_image(
-            org_id=org_id,
-            analysis_id=analysis_id,
-            ext=ext,
-            data=data,
-            content_type=image_content_type,
-        )
+        try:
+            image_s3_key = self.object_store.put_analysis_image(
+                org_id=org_id,
+                analysis_id=analysis_id,
+                ext=ext,
+                data=data,
+                content_type=image_content_type,
+            )
+        except StorageError:
+            raise
+        except Exception as exc:
+            raise StorageError("Failed to store analysis image") from exc
         self.repository.put_analysis(
             analysis_id=analysis_id,
             org_id=org_id,
@@ -86,7 +94,7 @@ class AnalyzeService:
         self,
         content_type: str | None,
         data: bytes,
-    ) -> tuple[int, int, str, str]:
+    ) -> tuple[int, int, str, str, np.ndarray]:
         if not data:
             raise InvalidImageError("Uploaded image is empty")
         if len(data) > MAX_IMAGE_BYTES:
@@ -99,17 +107,18 @@ class AnalyzeService:
             with Image.open(BytesIO(data)) as image:
                 image_format = image.format
                 width, height = image.size
+                image_array = np.asarray(image.convert("RGB"), dtype=np.uint8)
         except (UnidentifiedImageError, OSError, ValueError) as exc:
             raise InvalidImageError("Uploaded file is not a readable image") from exc
         if image_format not in ALLOWED_FORMATS:
             raise InvalidImageError(f"Unsupported image format: {image_format}")
         image_content_type, ext = ALLOWED_FORMATS[image_format]
-        return width, height, image_content_type, ext
+        return width, height, image_content_type, ext, image_array
 
-    def _predict_with_timeout(self, data: bytes) -> Any:
+    def _predict_with_timeout(self, image_array: np.ndarray) -> Any:
         executor = ThreadPoolExecutor(max_workers=1)
         try:
-            future = executor.submit(self.model_gateway.predict, data)
+            future = executor.submit(self.model_gateway.predict, image_array)
             try:
                 return future.result(timeout=self.timeout_seconds)
             except FutureTimeoutError as exc:

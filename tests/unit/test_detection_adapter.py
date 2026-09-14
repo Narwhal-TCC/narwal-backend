@@ -27,14 +27,17 @@ def test_yolo_like_rows_map_to_pixel_boxes_with_confidence():
     assert second.confidence == 0.42
 
 
-def test_boxes_are_clamped_to_uploaded_image_bounds():
+def test_boxes_use_half_open_pixel_intervals_clamped_to_image_bounds():
     raw = [(0.95, 0.95, 0.4, 0.4, 1.2)]
 
     detection = to_detections(raw, image_width=100, image_height=200)[0]
 
+    # Half-open [x1, x2) × [y1, y2): exclusive ends may equal image width/height.
     assert (detection.x1, detection.y1) == (75.0, 150.0)
     assert (detection.x2, detection.y2) == (100.0, 200.0)
     assert detection.confidence == 1.0
+    assert detection.x1 < detection.x2
+    assert detection.y1 < detection.y2
 
 
 def test_class_index_resolves_label_from_adapter_labels():

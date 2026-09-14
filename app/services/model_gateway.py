@@ -59,6 +59,7 @@ class FakeModelGateway:
     def __init__(self, raw_output: Sequence[Sequence] = DEFAULT_FAKE_RAW_OUTPUT) -> None:
         self.raw_output = raw_output
         self.loaded = False
+        self.last_image_array: Any | None = None
 
     def ensure_model_loaded(self) -> Any:
         self.loaded = True
@@ -66,4 +67,5 @@ class FakeModelGateway:
 
     def predict(self, image_array: Any) -> list[Sequence]:
         self.ensure_model_loaded()
+        self.last_image_array = image_array
         return [list(row) for row in self.raw_output]

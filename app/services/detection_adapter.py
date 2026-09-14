@@ -27,7 +27,8 @@ def to_detections(
     """Map YOLO-like rows to canonical detections.
 
     Each row is ``(x_center, y_center, width, height, confidence[, class_index])`` with
-    box values normalized to 0..1; output boxes are pixel coordinates of the uploaded image.
+    box values normalized to 0..1. Output boxes are pixel coordinates of the uploaded image
+    using half-open intervals ``[x1, x2)`` × ``[y1, y2)`` (inclusive start, exclusive end).
     """
     if not raw:
         return []

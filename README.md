@@ -73,3 +73,11 @@ python -m ruff check app tests
 ```
 
 Tests use moto and a fake model gateway, so neither AWS nor TensorFlow is required.
+
+For real `.keras` inference on a host that will load the artifact, install the optional extra:
+
+```bash
+pip install -e ".[inference]"
+```
+
+The API still runs without it; `KerasModelGateway` returns `MODEL_UNAVAILABLE` until TensorFlow/Keras is present and the object is loadable.
