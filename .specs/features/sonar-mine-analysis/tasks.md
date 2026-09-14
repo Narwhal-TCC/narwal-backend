@@ -314,9 +314,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Second `run_seed()` does not duplicate users
-- [ ] Platform admin from env is creatable
-- [ ] Integration test asserts seeded username can be loaded
+- [x] Second `run_seed()` does not duplicate users
+- [x] Platform admin from env is creatable
+- [x] Integration test asserts seeded username can be loaded
 
 **Tests**: integration
 **Gate**: full
