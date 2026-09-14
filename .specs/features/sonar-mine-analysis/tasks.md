@@ -264,9 +264,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] `verify_password` rejects wrong password
-- [ ] Token round-trip preserves `org_id`
-- [ ] Unit tests cover happy decode + expired/invalid token failure
+- [x] `verify_password` rejects wrong password
+- [x] Token round-trip preserves `org_id`
+- [x] Unit tests cover happy decode + expired/invalid token failure
 
 **Tests**: unit
 **Gate**: quick
