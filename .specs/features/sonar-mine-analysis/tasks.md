@@ -162,9 +162,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] `s3_client()` and `dynamodb_resource()` use settings endpoints when set
-- [ ] Path-style addressing enabled when `S3_FORCE_PATH_STYLE` is true
-- [ ] Unit test with monkeypatched settings asserts endpoint_url passed to boto3 (mock)
+- [x] `s3_client()` and `dynamodb_resource()` use settings endpoints when set
+- [x] Path-style addressing enabled when `S3_FORCE_PATH_STYLE` is true
+- [x] Unit test with monkeypatched settings asserts endpoint_url passed to boto3 (mock)
 
 **Tests**: unit
 **Gate**: quick
