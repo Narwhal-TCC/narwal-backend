@@ -443,9 +443,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Empty raw output → `[]`
-- [ ] Sample YOLO-like raw boxes map to schema
-- [ ] Unit tests cover empty + non-empty mapping
+- [x] Empty raw output → `[]`
+- [x] Sample YOLO-like raw boxes map to schema
+- [x] Unit tests cover empty + non-empty mapping
 
 **Tests**: unit
 **Gate**: quick
