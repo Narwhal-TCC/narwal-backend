@@ -417,10 +417,10 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] Put then get returns same detections
-- [ ] List is org-scoped only
-- [ ] Get wrong org returns miss (no item)
-- [ ] Integration tests cover put/list/get isolation
+- [x] Put then get returns same detections
+- [x] List is org-scoped only
+- [x] Get wrong org returns miss (no item)
+- [x] Integration tests cover put/list/get isolation
 
 **Tests**: integration
 **Gate**: full
