@@ -601,9 +601,9 @@ T19 -> T20 -> T21
 
 **Done when**:
 
-- [ ] `.env.example` lists all required vars with local defaults
-- [ ] README documents `docker compose up`, login, and analyze smoke
-- [ ] No secrets committed
+- [x] `.env.example` lists all required vars with local defaults
+- [x] README documents `docker compose up`, login, and analyze smoke
+- [x] No secrets committed
 
 **Tests**: none
 **Gate**: build
