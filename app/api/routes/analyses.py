@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_analyze_service, get_current_user, get_history_service
@@ -13,6 +13,9 @@ router = APIRouter(prefix="/analyses", tags=["analyses"])
 @router.post("", response_model=AnalysisResult)
 async def create_analysis(
     file: UploadFile = File(...),
+    campaign_name: str | None = Form(None),
+    coordinates: str | None = Form(None),
+    collected_at: str | None = Form(None),
     current_user: dict[str, str] = Depends(get_current_user),
     service: AnalyzeService = Depends(get_analyze_service),
 ) -> AnalysisResult:
@@ -24,6 +27,9 @@ async def create_analysis(
         user_id=current_user["user_id"],
         content_type=file.content_type,
         data=data,
+        campaign_name=campaign_name,
+        coordinates=coordinates,
+        collected_at=collected_at,
     )
 
 

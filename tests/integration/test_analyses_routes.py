@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from io import BytesIO
 
 import boto3
@@ -100,11 +101,18 @@ def auth_headers(client: TestClient, username: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token_for(client, username)}"}
 
 
-def post_image(client: TestClient, headers: dict, data: bytes, content_type: str = "image/png"):
+def post_image(
+    client: TestClient,
+    headers: dict,
+    data: bytes,
+    content_type: str = "image/png",
+    **form_fields: str,
+):
     return client.post(
         "/analyses",
         headers=headers,
         files={"file": ("sonar.png", data, content_type)},
+        data=form_fields,
     )
 
 
@@ -183,6 +191,63 @@ def test_analyze_with_unavailable_model_returns_503_and_creates_no_row(analyses_
     assert response.status_code == 503
     assert response.json()["code"] == "MODEL_UNAVAILABLE"
     gateway.unavailable = False
+    assert client.get("/analyses", headers=headers).json()["items"] == []
+
+
+def test_analyze_with_metadata_round_trips_in_response_and_get(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(
+        client,
+        headers,
+        png_bytes(),
+        campaign_name="North Survey",
+        coordinates="12.34, -56.78",
+        collected_at="2026-09-12T08:30:00+00:00",
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["campaign_name"] == "North Survey"
+    assert body["coordinates"] == "12.34, -56.78"
+    expected_collected_at = datetime(2026, 9, 12, 8, 30, tzinfo=UTC)
+    assert datetime.fromisoformat(body["collected_at"]) == expected_collected_at
+    assert body["review_status"] == "pending"
+    assert body["primary_class"] == "NOMBO"
+
+    detail = client.get(f"/analyses/{body['id']}", headers=headers).json()
+    assert detail["campaign_name"] == "North Survey"
+    assert detail["coordinates"] == "12.34, -56.78"
+    assert datetime.fromisoformat(detail["collected_at"]) == expected_collected_at
+
+
+def test_analyze_without_metadata_omits_optional_fields(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(client, headers, png_bytes())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["campaign_name"] is None
+    assert body["coordinates"] is None
+    assert body["collected_at"] is None
+
+
+def test_analyze_with_invalid_collected_at_returns_400_and_creates_no_row(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(
+        client,
+        headers,
+        png_bytes(),
+        collected_at="not-a-datetime",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "VALIDATION_ERROR"
     assert client.get("/analyses", headers=headers).json()["items"] == []
 
 
