@@ -8,6 +8,7 @@ from app.schemas.analysis import (
     AnalysisListResponse,
     AnalysisResult,
     AnalysisSummary,
+    OrgStatsResponse,
     PrimaryClass,
     ReviewStatus,
 )
@@ -79,6 +80,36 @@ class HistoryService:
         if updated is None:
             raise AnalysisNotFoundError()
         return self._to_summary(updated)
+
+    def get_org_stats(self, org_id: str) -> OrgStatsResponse:
+        records = self.repository.list_by_org(
+            org_id,
+            limit=self.list_scan_cap,
+            offset=0,
+        )
+        if not records:
+            return OrgStatsResponse(
+                analyses_count=0,
+                milco_detections_count=0,
+                last_analysis=None,
+                active_campaign=None,
+            )
+
+        active_campaign = None
+        for item in records:
+            campaign_name = item.get("campaign_name")
+            if campaign_name:
+                active_campaign = campaign_name
+                break
+
+        return OrgStatsResponse(
+            analyses_count=len(records),
+            milco_detections_count=sum(
+                item.get("milco_detection_count", 0) for item in records
+            ),
+            last_analysis=self._to_summary(records[0]),
+            active_campaign=active_campaign,
+        )
 
     @staticmethod
     def _normalize_q(q: str | None) -> str | None:

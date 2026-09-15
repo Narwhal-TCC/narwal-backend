@@ -300,3 +300,50 @@ def test_list_uses_scan_cap_when_loading_candidates():
     service.list_analyses("org-1")
 
     assert repository.last_list_limit == 123
+
+
+def test_get_org_stats_empty_org_returns_zeros_and_nulls():
+    service = build_service([record("an-1", "org-2")])
+
+    stats = service.get_org_stats("org-1")
+
+    assert stats.analyses_count == 0
+    assert stats.milco_detections_count == 0
+    assert stats.last_analysis is None
+    assert stats.active_campaign is None
+
+
+def test_get_org_stats_populated_org():
+    service = build_service(
+        [
+            record(
+                "an-3",
+                "org-1",
+                campaign_name="",
+                milco_detection_count=1,
+                created_at="2026-09-15T12:00:00+00:00",
+            ),
+            record(
+                "an-2",
+                "org-1",
+                campaign_name="Beta",
+                milco_detection_count=2,
+                created_at="2026-09-14T12:00:00+00:00",
+            ),
+            record(
+                "an-1",
+                "org-1",
+                campaign_name="Alpha",
+                milco_detection_count=3,
+                created_at="2026-09-13T12:00:00+00:00",
+            ),
+        ]
+    )
+
+    stats = service.get_org_stats("org-1")
+
+    assert stats.analyses_count == 3
+    assert stats.milco_detections_count == 6
+    assert stats.last_analysis is not None
+    assert stats.last_analysis.id == "an-3"
+    assert stats.active_campaign == "Beta"
