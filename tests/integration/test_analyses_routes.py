@@ -330,6 +330,80 @@ def test_list_returns_only_caller_org_analyses(analyses_client):
     assert rival_list["items"] == []
 
 
+def test_patch_review_status_transitions_pending_confirmed_false_positive(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+    created = post_image(client, headers, png_bytes()).json()
+    analysis_id = created["id"]
+
+    confirmed = client.patch(
+        f"/analyses/{analysis_id}",
+        headers=headers,
+        json={"review_status": "confirmed"},
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["review_status"] == "confirmed"
+
+    false_positive = client.patch(
+        f"/analyses/{analysis_id}",
+        headers=headers,
+        json={"review_status": "false_positive"},
+    )
+    assert false_positive.status_code == 200
+    assert false_positive.json()["review_status"] == "false_positive"
+    assert false_positive.json()["detections"] == created["detections"]
+    assert false_positive.json()["image_url"] is not None
+
+    listed = client.get("/analyses", headers=headers).json()
+    assert listed["items"][0]["review_status"] == "false_positive"
+
+
+def test_patch_invalid_review_status_returns_400(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+    created = post_image(client, headers, png_bytes()).json()
+
+    response = client.patch(
+        f"/analyses/{created['id']}",
+        headers=headers,
+        json={"review_status": "invalid"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "VALIDATION_ERROR"
+    assert (
+        client.get(f"/analyses/{created['id']}", headers=headers).json()["review_status"]
+        == "pending"
+    )
+
+
+def test_patch_review_status_cross_org_returns_404(analyses_client):
+    client, _ = analyses_client
+    created = post_image(client, auth_headers(client, "operator"), png_bytes()).json()
+
+    response = client.patch(
+        f"/analyses/{created['id']}",
+        headers=auth_headers(client, "rival"),
+        json={"review_status": "confirmed"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "ANALYSIS_NOT_FOUND"
+
+
+def test_patch_review_status_without_token_returns_401(analyses_client):
+    client, _ = analyses_client
+    created = post_image(client, auth_headers(client, "operator"), png_bytes()).json()
+
+    response = client.patch(
+        f"/analyses/{created['id']}",
+        json={"review_status": "confirmed"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "UNAUTHORIZED"
+
+
 def test_get_returns_detections_and_image_url_for_owning_org(analyses_client):
     client, _ = analyses_client
     headers = auth_headers(client, "operator")

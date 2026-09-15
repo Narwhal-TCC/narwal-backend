@@ -61,7 +61,7 @@ class AnalysisListResponse(BaseModel):
 
 
 class ReviewStatusUpdate(BaseModel):
-    review_status: ReviewStatus
+    review_status: str
 
 
 class OrgStatsResponse(BaseModel):
