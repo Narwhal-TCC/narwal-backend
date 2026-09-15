@@ -22,6 +22,13 @@ def test_endpoint_urls_load_from_env(monkeypatch):
     assert settings.dynamodb_endpoint_url == "http://dynamodb:8000"
 
 
+def test_list_scan_cap_loads_from_env(monkeypatch):
+    monkeypatch.setenv("LIST_SCAN_CAP", "750")
+    get_settings.cache_clear()
+    settings = get_settings()
+    assert settings.list_scan_cap == 750
+
+
 def test_local_defaults_are_safe_for_dev():
     env_keys = (
         "S3_ENDPOINT_URL",
@@ -37,6 +44,8 @@ def test_local_defaults_are_safe_for_dev():
         assert settings.ddb_table == "narwal"
         assert settings.aws_region == "us-east-1"
         assert settings.inference_timeout_seconds == 60
+        assert settings.list_scan_cap == 500
+        assert settings.max_metadata_length == 256
         assert settings.jwt_secret != ""
     finally:
         for key, value in saved.items():

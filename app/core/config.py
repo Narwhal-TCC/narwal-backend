@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     )
     inference_timeout_seconds: int = Field(default=60, alias="INFERENCE_TIMEOUT_SECONDS")
 
+    # Analysis list / metadata bounds
+    list_scan_cap: int = Field(default=500, alias="LIST_SCAN_CAP")
+    max_metadata_length: int = Field(default=256, alias="MAX_METADATA_LENGTH")
+
 
 @lru_cache
 def get_settings() -> Settings:
