@@ -6,11 +6,14 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from datetime import UTC, datetime
+
 from app.core.errors import (
     InferenceTimeoutError,
     InvalidImageError,
     ModelUnavailableError,
     StorageError,
+    ValidationError,
 )
 from app.services.analyze import MAX_IMAGE_BYTES, AnalyzeService
 from app.services.model_gateway import FakeModelGateway
@@ -248,6 +251,102 @@ def test_same_org_concurrent_analyses_keep_payloads_isolated():
     assert by_user["user-a"].image_s3_key != by_user["user-b"].image_s3_key
     assert len(repository.puts) == 2
     assert {row["user_id"] for row in repository.puts} == {"user-a", "user-b"}
+
+
+def test_analyze_with_metadata_persists_parity_fields():
+    repository = FakeAnalysisRepository()
+    service = build_service(repository=repository)
+
+    result = service.analyze_image(
+        org_id="org-1",
+        user_id="user-1",
+        content_type="image/png",
+        data=png_bytes(),
+        campaign_name="Alpha Campaign",
+        coordinates="-23.5,-46.6",
+        collected_at="2026-09-12T08:30:00+00:00",
+    )
+
+    assert result.review_status == "pending"
+    assert result.campaign_name == "Alpha Campaign"
+    assert result.coordinates == "-23.5,-46.6"
+    assert result.collected_at == datetime(2026, 9, 12, 8, 30, tzinfo=UTC)
+    assert result.primary_class == "NOMBO"
+    assert result.milco_detection_count == 0
+
+    persisted = repository.puts[0]
+    assert persisted["review_status"] == "pending"
+    assert persisted["campaign_name"] == "Alpha Campaign"
+    assert persisted["coordinates"] == "-23.5,-46.6"
+    assert persisted["collected_at"] == "2026-09-12T08:30:00+00:00"
+    assert persisted["primary_class"] == "NOMBO"
+    assert persisted["milco_detection_count"] == 0
+
+
+def test_analyze_without_metadata_uses_defaults():
+    repository = FakeAnalysisRepository()
+    service = build_service(repository=repository)
+
+    result = service.analyze_image("org-1", "user-1", "image/png", png_bytes())
+
+    assert result.review_status == "pending"
+    assert result.campaign_name is None
+    assert result.coordinates is None
+    assert result.collected_at is None
+    assert result.primary_class == "NOMBO"
+    assert result.milco_detection_count == 0
+    assert repository.puts[0]["campaign_name"] is None
+
+
+def test_oversized_campaign_name_is_rejected_without_any_write():
+    store = FakeObjectStore()
+    repository = FakeAnalysisRepository()
+    service = build_service(store=store, repository=repository)
+
+    with pytest.raises(ValidationError) as excinfo:
+        service.analyze_image(
+            "org-1",
+            "user-1",
+            "image/png",
+            png_bytes(),
+            campaign_name="x" * 257,
+        )
+
+    assert excinfo.value.status_code == 400
+    assert store.puts == []
+    assert repository.puts == []
+
+
+def test_invalid_collected_at_is_rejected_without_any_write():
+    store = FakeObjectStore()
+    repository = FakeAnalysisRepository()
+    service = build_service(store=store, repository=repository)
+
+    with pytest.raises(ValidationError) as excinfo:
+        service.analyze_image(
+            "org-1",
+            "user-1",
+            "image/png",
+            png_bytes(),
+            collected_at="not-a-datetime",
+        )
+
+    assert excinfo.value.status_code == 400
+    assert store.puts == []
+    assert repository.puts == []
+
+
+def test_milco_detection_sets_primary_class_and_count():
+    repository = FakeAnalysisRepository()
+    gateway = FakeModelGateway(raw_output=[(0.5, 0.5, 0.25, 0.5, 0.9, 0)])
+    service = build_service(gateway=gateway, repository=repository)
+
+    result = service.analyze_image("org-1", "user-1", "image/png", png_bytes())
+
+    assert result.primary_class == "MILCO"
+    assert result.milco_detection_count == 1
+    assert repository.puts[0]["primary_class"] == "MILCO"
+    assert repository.puts[0]["milco_detection_count"] == 1
 
 
 def test_inference_timeout_returns_timeout_error_without_success_row():

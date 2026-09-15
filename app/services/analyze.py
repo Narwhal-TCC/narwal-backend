@@ -9,12 +9,13 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from app.core.config import get_settings
-from app.core.errors import InferenceTimeoutError, InvalidImageError, StorageError
+from app.core.errors import InferenceTimeoutError, InvalidImageError, StorageError, ValidationError
 from app.repositories.analyses import AnalysisRepository, new_analysis_id
 from app.repositories.s3_store import S3ObjectStore
 from app.schemas.analysis import AnalysisResult
 from app.services.detection_adapter import to_detections
 from app.services.model_gateway import ModelGateway
+from app.services.primary_class import compute_primary_class, count_milco
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/jpg"}
@@ -40,7 +41,15 @@ class AnalyzeService:
         user_id: str,
         content_type: str | None,
         data: bytes,
+        campaign_name: str | None = None,
+        coordinates: str | None = None,
+        collected_at: str | datetime | None = None,
     ) -> AnalysisResult:
+        validated_metadata = self._validate_metadata(
+            campaign_name=campaign_name,
+            coordinates=coordinates,
+            collected_at=collected_at,
+        )
         width, height, image_content_type, ext, image_array = self._validate_image(
             content_type, data
         )
@@ -52,6 +61,8 @@ class AnalyzeService:
         inference_ms = int((time.perf_counter() - started) * 1000)
 
         detections = to_detections(raw, image_width=width, image_height=height)
+        primary_class = compute_primary_class(detections)
+        milco_detection_count = count_milco(detections)
 
         analysis_id = new_analysis_id()
         created_at = datetime.now(UTC)
@@ -67,11 +78,18 @@ class AnalyzeService:
             raise
         except Exception as exc:
             raise StorageError("Failed to store analysis image") from exc
+        collected_at_value = validated_metadata["collected_at"]
         self.repository.put_analysis(
             analysis_id=analysis_id,
             org_id=org_id,
             user_id=user_id,
             status="succeeded",
+            review_status="pending",
+            primary_class=primary_class,
+            campaign_name=validated_metadata["campaign_name"],
+            coordinates=validated_metadata["coordinates"],
+            collected_at=collected_at_value,
+            milco_detection_count=milco_detection_count,
             detections=[detection.model_dump() for detection in detections],
             image_s3_key=image_s3_key,
             image_content_type=image_content_type,
@@ -83,12 +101,52 @@ class AnalyzeService:
             org_id=org_id,
             user_id=user_id,
             status="succeeded",
+            review_status="pending",
+            primary_class=primary_class,
+            campaign_name=validated_metadata["campaign_name"],
+            coordinates=validated_metadata["coordinates"],
+            collected_at=(
+                datetime.fromisoformat(collected_at_value)
+                if collected_at_value is not None
+                else None
+            ),
+            milco_detection_count=milco_detection_count,
             detections=detections,
             image_content_type=image_content_type,
             image_s3_key=image_s3_key,
             created_at=created_at,
             inference_ms=inference_ms,
         )
+
+    def _validate_metadata(
+        self,
+        campaign_name: str | None,
+        coordinates: str | None,
+        collected_at: str | datetime | None,
+    ) -> dict[str, str | None]:
+        max_length = get_settings().max_metadata_length
+        if campaign_name is not None and len(campaign_name) > max_length:
+            raise ValidationError(
+                f"campaign_name exceeds the maximum length of {max_length} characters"
+            )
+        if coordinates is not None and len(coordinates) > max_length:
+            raise ValidationError(
+                f"coordinates exceeds the maximum length of {max_length} characters"
+            )
+        collected_at_value: str | None = None
+        if collected_at is not None:
+            if isinstance(collected_at, datetime):
+                collected_at_value = collected_at.isoformat()
+            else:
+                try:
+                    collected_at_value = datetime.fromisoformat(collected_at).isoformat()
+                except ValueError as exc:
+                    raise ValidationError("collected_at is not a valid datetime") from exc
+        return {
+            "campaign_name": campaign_name,
+            "coordinates": coordinates,
+            "collected_at": collected_at_value,
+        }
 
     def _validate_image(
         self,

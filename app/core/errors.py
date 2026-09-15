@@ -30,6 +30,12 @@ class InvalidImageError(AppError):
     default_message = "Invalid or unsupported image upload"
 
 
+class ValidationError(AppError):
+    code = "VALIDATION_ERROR"
+    status_code = 400
+    default_message = "Request validation failed"
+
+
 class ModelUnavailableError(AppError):
     code = "MODEL_UNAVAILABLE"
     status_code = 503
