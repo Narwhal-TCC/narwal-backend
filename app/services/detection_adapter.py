@@ -2,7 +2,8 @@ from collections.abc import Iterable, Sequence
 
 from app.schemas.analysis import Detection
 
-DEFAULT_LABEL = "mine"
+DEFAULT_LABEL = "NOMBO"
+DEFAULT_LABELS = ("MILCO", "NOMBO")
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -22,7 +23,7 @@ def to_detections(
     raw: Iterable[Sequence] | None,
     image_width: int,
     image_height: int,
-    labels: Sequence[str] = (DEFAULT_LABEL,),
+    labels: Sequence[str] = DEFAULT_LABELS,
 ) -> list[Detection]:
     """Map YOLO-like rows to canonical detections.
 

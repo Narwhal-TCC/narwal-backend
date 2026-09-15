@@ -19,12 +19,13 @@ def test_yolo_like_rows_map_to_pixel_boxes_with_confidence():
     first = detections[0]
     assert (first.x1, first.y1, first.x2, first.y2) == (240.0, 120.0, 400.0, 360.0)
     assert first.confidence == 0.9
-    assert first.label == "mine"
+    assert first.label == "NOMBO"
     second = detections[1]
     assert (second.x1, second.y1, second.x2, second.y2) == pytest.approx(
         (0.0, 48.0, 128.0, 144.0)
     )
     assert second.confidence == 0.42
+    assert second.label == "NOMBO"
 
 
 def test_boxes_use_half_open_pixel_intervals_clamped_to_image_bounds():
@@ -38,11 +39,20 @@ def test_boxes_use_half_open_pixel_intervals_clamped_to_image_bounds():
     assert detection.confidence == 1.0
     assert detection.x1 < detection.x2
     assert detection.y1 < detection.y2
+    assert detection.label == "NOMBO"
 
 
-def test_class_index_resolves_label_from_adapter_labels():
-    raw = [(0.5, 0.5, 0.2, 0.2, 0.8, 1)]
+def test_class_index_resolves_milco_and_nombo_from_default_labels():
+    milco = to_detections([(0.5, 0.5, 0.2, 0.2, 0.8, 0)], 100, 100)[0]
+    nombo = to_detections([(0.5, 0.5, 0.2, 0.2, 0.8, 1)], 100, 100)[0]
 
-    detection = to_detections(raw, 100, 100, labels=("mine", "debris"))[0]
+    assert milco.label == "MILCO"
+    assert nombo.label == "NOMBO"
 
-    assert detection.label == "debris"
+
+def test_unknown_or_missing_class_index_falls_back_to_nombo():
+    missing_index = to_detections([(0.5, 0.5, 0.2, 0.2, 0.8)], 100, 100)[0]
+    out_of_range = to_detections([(0.5, 0.5, 0.2, 0.2, 0.8, 99)], 100, 100)[0]
+
+    assert missing_index.label == "NOMBO"
+    assert out_of_range.label == "NOMBO"
