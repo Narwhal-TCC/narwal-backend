@@ -37,10 +37,18 @@ async def create_analysis(
 def list_analyses(
     limit: int = Query(default=DEFAULT_LIST_LIMIT, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    q: str | None = Query(default=None),
+    class_filter: str | None = Query(default=None, alias="class"),
     current_user: dict[str, str] = Depends(get_current_user),
     service: HistoryService = Depends(get_history_service),
 ) -> AnalysisListResponse:
-    return service.list_analyses(current_user["org_id"], limit=limit, offset=offset)
+    return service.list_analyses(
+        current_user["org_id"],
+        limit=limit,
+        offset=offset,
+        q=q,
+        class_filter=class_filter,
+    )
 
 
 @router.get("/{analysis_id}", response_model=AnalysisResult)

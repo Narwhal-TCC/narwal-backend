@@ -260,6 +260,63 @@ def test_analyze_without_token_returns_401(analyses_client):
     assert response.json()["code"] == "UNAUTHORIZED"
 
 
+def test_list_q_filters_by_campaign_name(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+    post_image(client, headers, png_bytes(), campaign_name="North Survey")
+    post_image(client, headers, png_bytes(), campaign_name="South Run")
+
+    response = client.get("/analyses", headers=headers, params={"q": "north"})
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["campaign_name"] == "North Survey"
+
+
+def test_list_class_filter_milco_and_nombo(analyses_client):
+    client, gateway = analyses_client
+    headers = auth_headers(client, "operator")
+    gateway.raw_output = [(0.5, 0.5, 0.25, 0.5, 0.9, 0)]
+    milco = post_image(client, headers, png_bytes()).json()
+    gateway.raw_output = [(0.5, 0.5, 0.25, 0.5, 0.9, 1)]
+    nombo = post_image(client, headers, png_bytes()).json()
+
+    milco_list = client.get("/analyses", headers=headers, params={"class": "MILCO"}).json()
+    nombo_list = client.get("/analyses", headers=headers, params={"class": "NOMBO"}).json()
+
+    assert [item["id"] for item in milco_list["items"]] == [milco["id"]]
+    assert milco_list["items"][0]["primary_class"] == "MILCO"
+    assert [item["id"] for item in nombo_list["items"]] == [nombo["id"]]
+    assert nombo_list["items"][0]["primary_class"] == "NOMBO"
+
+
+def test_list_invalid_class_returns_400(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = client.get("/analyses", headers=headers, params={"class": "UNKNOWN"})
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "VALIDATION_ERROR"
+
+
+def test_list_filters_respect_org_isolation(analyses_client):
+    client, gateway = analyses_client
+    owner_headers = auth_headers(client, "operator")
+    rival_headers = auth_headers(client, "rival")
+    gateway.raw_output = [(0.5, 0.5, 0.25, 0.5, 0.9, 0)]
+    post_image(client, owner_headers, png_bytes(), campaign_name="North Survey")
+
+    rival_list = client.get(
+        "/analyses",
+        headers=rival_headers,
+        params={"q": "north", "class": "MILCO"},
+    ).json()
+
+    assert rival_list["items"] == []
+
+
 def test_list_returns_only_caller_org_analyses(analyses_client):
     client, _ = analyses_client
     owner_headers = auth_headers(client, "operator")
