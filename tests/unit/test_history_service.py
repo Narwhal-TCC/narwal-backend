@@ -184,6 +184,21 @@ def test_list_class_milco_excludes_nombo_and_null_primary():
     assert [item.id for item in page.items] == ["milco-1"]
 
 
+def test_list_omitted_class_includes_null_primary():
+    service = build_service(
+        [
+            record("milco-1", "org-1", primary_class="MILCO"),
+            record("nombo-1", "org-1", primary_class="NOMBO"),
+            record("null-1", "org-1", primary_class=None),
+        ]
+    )
+
+    page = service.list_analyses("org-1")
+
+    assert [item.id for item in page.items] == ["milco-1", "nombo-1", "null-1"]
+    assert page.items[2].primary_class is None
+
+
 def test_list_class_nombo():
     service = build_service(
         [
