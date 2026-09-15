@@ -9,9 +9,11 @@ from app.schemas.analysis import (
     AnalysisResult,
     AnalysisSummary,
     PrimaryClass,
+    ReviewStatus,
 )
 
 VALID_PRIMARY_CLASSES = frozenset({"MILCO", "NOMBO"})
+VALID_REVIEW_STATUSES = frozenset({"pending", "confirmed", "false_positive"})
 
 
 class HistoryService:
@@ -62,6 +64,21 @@ class HistoryService:
         if record is None:
             raise AnalysisNotFoundError()
         return self._to_result(record)
+
+    def update_review_status(
+        self,
+        org_id: str,
+        analysis_id: str,
+        review_status: ReviewStatus,
+    ) -> AnalysisSummary:
+        if review_status not in VALID_REVIEW_STATUSES:
+            raise ValidationError(
+                f"review_status must be one of: {', '.join(sorted(VALID_REVIEW_STATUSES))}"
+            )
+        updated = self.repository.update_review_status(org_id, analysis_id, review_status)
+        if updated is None:
+            raise AnalysisNotFoundError()
+        return self._to_summary(updated)
 
     @staticmethod
     def _normalize_q(q: str | None) -> str | None:

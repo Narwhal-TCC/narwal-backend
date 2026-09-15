@@ -41,7 +41,7 @@ def record(
 
 class FakeAnalysisRepository:
     def __init__(self, records: list[dict]) -> None:
-        self.records = records
+        self.records = [dict(item) for item in records]
         self.last_list_limit: int | None = None
 
     def list_by_org(self, org_id: str, limit: int = 50, offset: int = 0) -> list[dict]:
@@ -53,6 +53,18 @@ class FakeAnalysisRepository:
         for item in self.records:
             if item["org_id"] == org_id and item["id"] == analysis_id:
                 return item
+        return None
+
+    def update_review_status(
+        self,
+        org_id: str,
+        analysis_id: str,
+        review_status: str,
+    ) -> dict | None:
+        for item in self.records:
+            if item["org_id"] == org_id and item["id"] == analysis_id:
+                item["review_status"] = review_status
+                return dict(item)
         return None
 
 
@@ -232,6 +244,49 @@ def test_list_maps_parity_fields_on_summary():
     assert summary.coordinates == "-23.5,-46.6"
     assert summary.collected_at is not None
     assert summary.milco_detection_count == 2
+
+
+@pytest.mark.parametrize(
+    ("initial", "updated"),
+    [
+        ("pending", "confirmed"),
+        ("confirmed", "false_positive"),
+        ("false_positive", "pending"),
+    ],
+)
+def test_update_review_status_accepts_free_transitions(initial, updated):
+    service = build_service([record("an-1", "org-1", review_status=initial)])
+
+    summary = service.update_review_status("org-1", "an-1", updated)
+
+    assert summary.review_status == updated
+    assert service.get_analysis("org-1", "an-1").review_status == updated
+
+
+def test_update_review_status_invalid_value_raises_validation_error():
+    service = build_service([record("an-1", "org-1")])
+
+    with pytest.raises(ValidationError) as excinfo:
+        service.update_review_status("org-1", "an-1", "invalid")  # type: ignore[arg-type]
+
+    assert excinfo.value.status_code == 400
+    assert service.get_analysis("org-1", "an-1").review_status == "pending"
+
+
+def test_update_review_status_missing_raises_not_found():
+    service = build_service([record("an-1", "org-1")])
+
+    with pytest.raises(AnalysisNotFoundError) as excinfo:
+        service.update_review_status("org-1", "missing", "confirmed")
+
+    assert excinfo.value.status_code == 404
+
+
+def test_update_review_status_cross_org_raises_not_found():
+    service = build_service([record("an-1", "org-2")])
+
+    with pytest.raises(AnalysisNotFoundError):
+        service.update_review_status("org-1", "an-1", "confirmed")
 
 
 def test_list_uses_scan_cap_when_loading_candidates():
