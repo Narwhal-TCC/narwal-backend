@@ -31,17 +31,24 @@ def _decode(value: Any) -> Any:
 
 def _to_record(item: dict) -> dict:
     inference_ms = item.get("inference_ms")
-    return {
+    record = {
         "id": item["analysis_id"],
         "org_id": item["org_id"],
         "user_id": item["user_id"],
         "status": item["status"],
+        "review_status": item.get("review_status", "pending"),
+        "primary_class": item.get("primary_class"),
+        "campaign_name": item.get("campaign_name"),
+        "coordinates": item.get("coordinates"),
+        "collected_at": item.get("collected_at"),
+        "milco_detection_count": int(item.get("milco_detection_count", 0)),
         "detections": _decode(item.get("detections", [])),
         "image_s3_key": item["image_s3_key"],
         "image_content_type": item["image_content_type"],
         "created_at": item["created_at"],
         "inference_ms": int(inference_ms) if inference_ms is not None else None,
     }
+    return record
 
 
 class AnalysisRepository:
@@ -59,6 +66,12 @@ class AnalysisRepository:
         created_at: str,
         inference_ms: int | None = None,
         status: str = "succeeded",
+        review_status: str = "pending",
+        primary_class: str | None = None,
+        campaign_name: str | None = None,
+        coordinates: str | None = None,
+        collected_at: str | None = None,
+        milco_detection_count: int = 0,
     ) -> dict:
         item = {
             "PK": f"ORG#{org_id}",
@@ -67,14 +80,46 @@ class AnalysisRepository:
             "org_id": org_id,
             "user_id": user_id,
             "status": status,
+            "review_status": review_status,
+            "milco_detection_count": milco_detection_count,
             "detections": _encode(detections),
             "image_s3_key": image_s3_key,
             "image_content_type": image_content_type,
             "created_at": created_at,
             "inference_ms": inference_ms,
         }
+        if primary_class is not None:
+            item["primary_class"] = primary_class
+        if campaign_name is not None:
+            item["campaign_name"] = campaign_name
+        if coordinates is not None:
+            item["coordinates"] = coordinates
+        if collected_at is not None:
+            item["collected_at"] = collected_at
         self.table.put_item(Item=item)
         return _to_record(item)
+
+    def update_review_status(
+        self,
+        org_id: str,
+        analysis_id: str,
+        review_status: str,
+    ) -> dict | None:
+        from botocore.exceptions import ClientError
+
+        try:
+            response = self.table.update_item(
+                Key={"PK": f"ORG#{org_id}", "SK": f"ANALYSIS#{analysis_id}"},
+                UpdateExpression="SET review_status = :review_status",
+                ConditionExpression="attribute_exists(PK)",
+                ExpressionAttributeValues={":review_status": review_status},
+                ReturnValues="ALL_NEW",
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return None
+            raise
+        return _to_record(response["Attributes"])
 
     def get_analysis(self, org_id: str, analysis_id: str) -> dict | None:
         response = self.table.get_item(

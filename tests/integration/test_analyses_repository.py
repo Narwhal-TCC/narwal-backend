@@ -6,7 +6,7 @@ from app.repositories.analyses import AnalysisRepository, new_analysis_id
 from app.repositories.users import ensure_table
 
 DETECTIONS = [
-    {"x1": 12.5, "y1": 30.0, "x2": 80.25, "y2": 140.75, "confidence": 0.87, "label": "mine"}
+    {"x1": 12.5, "y1": 30.0, "x2": 80.25, "y2": 140.75, "confidence": 0.87, "label": "MILCO"}
 ]
 
 
@@ -85,3 +85,47 @@ def test_new_analysis_id_is_unique_and_time_sortable():
 
     assert first != second
     assert first < second
+
+
+def test_put_parity_fields_round_trip(repository):
+    repository.put_analysis(
+        analysis_id="an-parity",
+        org_id="org-1",
+        user_id="user-1",
+        detections=DETECTIONS,
+        image_s3_key="analyses/org-1/an-parity/original.png",
+        image_content_type="image/png",
+        created_at="2026-09-13T12:00:00+00:00",
+        inference_ms=42,
+        review_status="pending",
+        primary_class="MILCO",
+        campaign_name="Alpha",
+        coordinates="-23.5,-46.6",
+        collected_at="2026-09-12T08:30:00+00:00",
+        milco_detection_count=1,
+    )
+
+    record = repository.get_analysis("org-1", "an-parity")
+
+    assert record["review_status"] == "pending"
+    assert record["primary_class"] == "MILCO"
+    assert record["campaign_name"] == "Alpha"
+    assert record["coordinates"] == "-23.5,-46.6"
+    assert record["collected_at"] == "2026-09-12T08:30:00+00:00"
+    assert record["milco_detection_count"] == 1
+
+
+def test_update_review_status_updates_only_review_status(repository):
+    _put(repository, "an-1", "org-1")
+
+    updated = repository.update_review_status("org-1", "an-1", "confirmed")
+
+    assert updated is not None
+    assert updated["review_status"] == "confirmed"
+    assert updated["status"] == "succeeded"
+    assert updated["detections"] == DETECTIONS
+    assert repository.get_analysis("org-1", "an-1")["review_status"] == "confirmed"
+
+
+def test_update_review_status_missing_returns_none(repository):
+    assert repository.update_review_status("org-1", "missing", "confirmed") is None
