@@ -1,8 +1,12 @@
+from typing import Literal
+
 from app.schemas.analysis import Detection
 from app.services.primary_class import compute_primary_class, count_milco
 
+DetectionLabel = Literal["MILCO", "NOMBO"]
 
-def _detection(label: str, confidence: float) -> Detection:
+
+def _detection(label: DetectionLabel, confidence: float) -> Detection:
     return Detection(x1=0.0, y1=0.0, x2=10.0, y2=10.0, confidence=confidence, label=label)
 
 

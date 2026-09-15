@@ -3,6 +3,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+DetectionLabel = Literal["MILCO", "NOMBO"]
+PrimaryClass = Literal["MILCO", "NOMBO"]
+ReviewStatus = Literal["pending", "confirmed", "false_positive"]
+
 
 class Detection(BaseModel):
     """Axis-aligned box in uploaded-image pixels: half-open ``[x1, x2)`` × ``[y1, y2)``."""
@@ -12,7 +16,7 @@ class Detection(BaseModel):
     x2: float
     y2: float
     confidence: float = Field(ge=0.0, le=1.0)
-    label: str = "mine"
+    label: DetectionLabel
 
 
 class AnalysisResult(BaseModel):
@@ -20,6 +24,12 @@ class AnalysisResult(BaseModel):
     org_id: str
     user_id: str
     status: Literal["succeeded"]
+    review_status: ReviewStatus = "pending"
+    primary_class: PrimaryClass | None = None
+    campaign_name: str | None = Field(default=None, max_length=256)
+    coordinates: str | None = Field(default=None, max_length=256)
+    collected_at: datetime | None = None
+    milco_detection_count: int = 0
     detections: list[Detection]
     image_content_type: str
     image_s3_key: str
@@ -33,6 +43,12 @@ class AnalysisSummary(BaseModel):
     org_id: str
     user_id: str
     status: Literal["succeeded"]
+    review_status: ReviewStatus = "pending"
+    primary_class: PrimaryClass | None = None
+    campaign_name: str | None = Field(default=None, max_length=256)
+    coordinates: str | None = Field(default=None, max_length=256)
+    collected_at: datetime | None = None
+    milco_detection_count: int = 0
     created_at: datetime
     inference_ms: int | None = None
     detection_count: int
@@ -42,3 +58,14 @@ class AnalysisListResponse(BaseModel):
     items: list[AnalysisSummary]
     limit: int
     offset: int
+
+
+class ReviewStatusUpdate(BaseModel):
+    review_status: ReviewStatus
+
+
+class OrgStatsResponse(BaseModel):
+    analyses_count: int
+    milco_detections_count: int
+    last_analysis: AnalysisSummary | None
+    active_campaign: str | None

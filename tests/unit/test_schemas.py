@@ -19,9 +19,11 @@ def test_analysis_result_accepts_empty_detections():
     assert result.detections == []
 
 
-def test_detection_defaults_label_to_mine():
-    detection = Detection(x1=0, y1=0, x2=10, y2=10, confidence=0.9)
-    assert detection.label == "mine"
+def test_detection_accepts_milco_and_nombo_labels():
+    milco = Detection(x1=0, y1=0, x2=10, y2=10, confidence=0.9, label="MILCO")
+    nombo = Detection(x1=0, y1=0, x2=10, y2=10, confidence=0.9, label="NOMBO")
+    assert milco.label == "MILCO"
+    assert nombo.label == "NOMBO"
 
 
 def test_login_and_token_schemas_round_trip():

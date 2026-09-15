@@ -4,7 +4,7 @@ from app.core.errors import AnalysisNotFoundError
 from app.services.history import HistoryService
 
 DETECTIONS = [
-    {"x1": 10.0, "y1": 20.0, "x2": 30.0, "y2": 40.0, "confidence": 0.75, "label": "mine"}
+    {"x1": 10.0, "y1": 20.0, "x2": 30.0, "y2": 40.0, "confidence": 0.75, "label": "NOMBO"}
 ]
 
 

@@ -16,4 +16,4 @@ def compute_primary_class(detections: Sequence[Detection]) -> PrimaryClass | Non
     if count_milco(detections) > 0:
         return "MILCO"
     best = max(detections, key=lambda detection: detection.confidence)
-    return best.label  # type: ignore[return-value]
+    return best.label
