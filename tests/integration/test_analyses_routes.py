@@ -433,6 +433,59 @@ def test_get_analysis_of_another_org_returns_404(analyses_client):
     assert response.json()["code"] == "ANALYSIS_NOT_FOUND"
 
 
+def test_stats_empty_org_returns_zeros_and_nulls(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = client.get("/analyses/stats", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["analyses_count"] == 0
+    assert body["milco_detections_count"] == 0
+    assert body["last_analysis"] is None
+    assert body["active_campaign"] is None
+
+
+def test_stats_populated_org_aggregates_counts_and_campaign(analyses_client):
+    client, gateway = analyses_client
+    headers = auth_headers(client, "operator")
+    gateway.raw_output = [(0.5, 0.5, 0.25, 0.5, 0.9, 0)]
+    post_image(client, headers, png_bytes(), campaign_name="Beta").json()
+    gateway.raw_output = [(0.5, 0.5, 0.25, 0.5, 0.9, 1)]
+    latest = post_image(client, headers, png_bytes(), campaign_name="Alpha").json()
+
+    response = client.get("/analyses/stats", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["analyses_count"] == 2
+    assert body["milco_detections_count"] == 1
+    assert body["active_campaign"] == "Alpha"
+    assert body["last_analysis"]["id"] == latest["id"]
+    assert body["last_analysis"]["primary_class"] == "NOMBO"
+
+
+def test_stats_is_not_captured_as_analysis_id(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = client.get("/analyses/stats", headers=headers)
+
+    assert response.status_code == 200
+    assert "analyses_count" in response.json()
+    assert response.json().get("code") != "ANALYSIS_NOT_FOUND"
+
+
+def test_stats_without_token_returns_401(analyses_client):
+    client, _ = analyses_client
+
+    response = client.get("/analyses/stats")
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "UNAUTHORIZED"
+
+
 def test_platform_admin_cannot_list_or_get_another_org_analyses(analyses_client):
     client, _ = analyses_client
     created = post_image(client, auth_headers(client, "operator"), png_bytes()).json()

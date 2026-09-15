@@ -3,7 +3,12 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_analyze_service, get_current_user, get_history_service
 from app.repositories.analyses import DEFAULT_LIST_LIMIT
-from app.schemas.analysis import AnalysisListResponse, AnalysisResult, ReviewStatusUpdate
+from app.schemas.analysis import (
+    AnalysisListResponse,
+    AnalysisResult,
+    OrgStatsResponse,
+    ReviewStatusUpdate,
+)
 from app.services.analyze import AnalyzeService
 from app.services.history import HistoryService
 
@@ -49,6 +54,14 @@ def list_analyses(
         q=q,
         class_filter=class_filter,
     )
+
+
+@router.get("/stats", response_model=OrgStatsResponse)
+def get_org_stats(
+    current_user: dict[str, str] = Depends(get_current_user),
+    service: HistoryService = Depends(get_history_service),
+) -> OrgStatsResponse:
+    return service.get_org_stats(current_user["org_id"])
 
 
 @router.patch("/{analysis_id}", response_model=AnalysisResult)
