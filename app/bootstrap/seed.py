@@ -20,6 +20,19 @@ def run_seed(repository: UserRepository | None = None) -> None:
             role="platform_admin",
         )
 
+    demo_org_id = settings.seed_demo_org_id
+    if repo.get_org(demo_org_id) is None:
+        repo.put_org(org_id=demo_org_id, name="Demo")
+
+    if repo.get_by_username(settings.seed_demo_username) is None:
+        repo.put_user(
+            user_id="demo-user",
+            org_id=demo_org_id,
+            username=settings.seed_demo_username,
+            password_hash=hash_password(settings.seed_demo_password),
+            role="member",
+        )
+
 
 if __name__ == "__main__":
     run_seed()

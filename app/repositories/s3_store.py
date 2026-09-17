@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -40,6 +41,34 @@ class S3ObjectStore:
         if settings.s3_public_endpoint:
             return s3_client(endpoint_url=settings.s3_public_endpoint)
         return self.client
+
+    def object_exists(self, bucket: str, key: str) -> bool:
+        try:
+            self.client.head_object(Bucket=bucket, Key=key)
+            return True
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] in {"404", "NoSuchKey"}:
+                return False
+            raise
+
+    def seed_model_if_missing(self, local_path: str | Path) -> bool:
+        """Upload a local `.keras` artifact when it is absent from object storage."""
+        path = Path(local_path)
+        if not path.is_file():
+            return False
+        bucket, key = parse_s3_uri(get_settings().model_s3_uri)
+        if self.object_exists(bucket, key):
+            return False
+        try:
+            self.client.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=path.read_bytes(),
+                ContentType="application/octet-stream",
+            )
+        except (ClientError, BotoCoreError) as exc:
+            raise StorageError(f"Could not upload model artifact to s3://{bucket}/{key}") from exc
+        return True
 
     def ensure_bucket(self) -> None:
         try:

@@ -61,8 +61,14 @@ services:
       PLATFORM_ADMIN_USERNAME: admin
       PLATFORM_ADMIN_PASSWORD: admin
       PLATFORM_ADMIN_ORG_ID: platform
+      SEED_DEMO_USERNAME: demo
+      SEED_DEMO_PASSWORD: demo
+      SEED_DEMO_ORG_ID: demo
+      MODEL_LOCAL_PATH: /app/data/MobileNetV2_fase_congelada.keras
       MODEL_S3_URI: s3://narwal/models/v1/model.keras
       INFERENCE_TIMEOUT_SECONDS: "60"
+    volumes:
+      - ./data:/app/data:ro
     depends_on:
       minio:
         condition: service_healthy

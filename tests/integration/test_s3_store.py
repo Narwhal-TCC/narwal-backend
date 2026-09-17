@@ -69,6 +69,35 @@ def test_download_model_with_misconfigured_uri_raises_model_unavailable(local_en
     assert excinfo.value.code == "MODEL_UNAVAILABLE"
 
 
+def test_seed_model_if_missing_uploads_local_file(store, tmp_path):
+    model_path = tmp_path / "model.keras"
+    model_path.write_bytes(b"keras-artifact")
+
+    uploaded = store.seed_model_if_missing(model_path)
+
+    assert uploaded is True
+    stored = store.client.get_object(Bucket=BUCKET, Key=MODEL_KEY)
+    assert stored["Body"].read() == b"keras-artifact"
+
+
+def test_seed_model_if_missing_is_idempotent(store, tmp_path):
+    model_path = tmp_path / "model.keras"
+    model_path.write_bytes(b"keras-artifact")
+    store.client.put_object(Bucket=BUCKET, Key=MODEL_KEY, Body=b"existing")
+
+    uploaded = store.seed_model_if_missing(model_path)
+
+    assert uploaded is False
+    stored = store.client.get_object(Bucket=BUCKET, Key=MODEL_KEY)
+    assert stored["Body"].read() == b"existing"
+
+
+def test_seed_model_if_missing_noops_when_local_file_absent(store, tmp_path):
+    uploaded = store.seed_model_if_missing(tmp_path / "missing.keras")
+
+    assert uploaded is False
+
+
 def test_presign_get_signs_against_public_endpoint_when_set(local_env):
     local_env.setenv("S3_PUBLIC_ENDPOINT", "http://localhost:9000")
     get_settings.cache_clear()

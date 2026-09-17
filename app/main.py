@@ -9,6 +9,7 @@ from app.api.deps import get_model_gateway
 from app.api.routes.analyses import router as analyses_router
 from app.api.routes.auth import router as auth_router
 from app.bootstrap.seed import run_seed
+from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.repositories.s3_store import S3ObjectStore
 
@@ -17,10 +18,17 @@ logger = logging.getLogger(__name__)
 
 def bootstrap() -> None:
     """Best-effort startup bootstrap: the API must still serve when a backing store lags."""
+    store = S3ObjectStore()
     try:
-        S3ObjectStore().ensure_bucket()
+        store.ensure_bucket()
     except Exception:
         logger.warning("Could not ensure the object storage bucket", exc_info=True)
+    try:
+        local_model_path = get_settings().model_local_path
+        if local_model_path and store.seed_model_if_missing(local_model_path):
+            logger.info("Uploaded local model artifact to object storage")
+    except Exception:
+        logger.warning("Could not seed model artifact to object storage", exc_info=True)
     try:
         run_seed()
     except Exception:

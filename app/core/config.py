@@ -28,7 +28,15 @@ class Settings(BaseSettings):
     platform_admin_password: str = Field(default="admin", alias="PLATFORM_ADMIN_PASSWORD")
     platform_admin_org_id: str = Field(default="platform", alias="PLATFORM_ADMIN_ORG_ID")
 
+    seed_demo_username: str = Field(default="demo", alias="SEED_DEMO_USERNAME")
+    seed_demo_password: str = Field(default="demo", alias="SEED_DEMO_PASSWORD")
+    seed_demo_org_id: str = Field(default="demo", alias="SEED_DEMO_ORG_ID")
+
     # Model / inference
+    model_local_path: str | None = Field(
+        default="data/MobileNetV2_fase_congelada.keras",
+        alias="MODEL_LOCAL_PATH",
+    )
     model_s3_uri: str = Field(
         default="s3://narwal/models/v1/model.keras",
         alias="MODEL_S3_URI",

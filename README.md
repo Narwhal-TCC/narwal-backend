@@ -19,10 +19,11 @@ docker compose up --build
 | MinIO console | http://localhost:9001 | `minioadmin` / `minioadmin` |
 | DynamoDB Local | http://localhost:8000 | `-inMemory`, so data resets when the container is recreated |
 
-Startup runs a best-effort bootstrap: ensure the bucket, seed the platform admin from
-`PLATFORM_ADMIN_*`, and preload the model. Each step logs a warning and the API still serves if a
-backing store is not ready yet. DynamoDB Local runs in memory, so re-seeding happens on every
-`docker compose up`.
+Startup runs a best-effort bootstrap: ensure the bucket, upload the local `.keras` artifact from
+`MODEL_LOCAL_PATH` when it is missing in object storage, seed the platform admin from
+`PLATFORM_ADMIN_*` and a demo member from `SEED_DEMO_*`, and preload the model. Each step logs a
+warning and the API still serves if a backing store is not ready yet. DynamoDB Local runs in
+memory, so re-seeding happens on every `docker compose up`.
 
 ## Environment variables
 
@@ -37,10 +38,10 @@ so browsers need `http://localhost:9000` rather than the Docker-internal `http:/
 ## Smoke test
 
 ```bash
-# 1. log in as the seeded platform admin
+# 1. log in as the seeded demo member (or platform admin: admin / admin)
 curl -s -X POST http://localhost:8080/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"admin"}'
+  -d '{"username":"demo","password":"demo"}'
 
 # 2. analyze an image (PNG or JPEG, max 10 MB)
 curl -s -X POST http://localhost:8080/analyses \
@@ -52,9 +53,9 @@ curl -s http://localhost:8080/analyses -H "Authorization: Bearer $TOKEN"
 curl -s http://localhost:8080/analyses/$ANALYSIS_ID -H "Authorization: Bearer $TOKEN"
 ```
 
-Analyze needs the `.keras` artifact at `MODEL_S3_URI`; upload it to MinIO (console or
-`mc cp model.keras local/narwal/models/v1/model.keras`) or the call returns
-`503 MODEL_UNAVAILABLE`.
+Locally, startup uploads `data/MobileNetV2_fase_congelada.keras` to `MODEL_S3_URI` when the object
+is missing. Without that file, upload the artifact to MinIO manually (console or
+`mc cp model.keras local/narwal/models/v1/model.keras`) or analyze returns `503 MODEL_UNAVAILABLE`.
 
 | Failure | Status | Code |
 | ------- | ------ | ---- |
