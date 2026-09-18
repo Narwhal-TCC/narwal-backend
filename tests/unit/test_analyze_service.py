@@ -47,10 +47,16 @@ class FakeObjectStore:
         )
         return f"analyses/{org_id}/{analysis_id}/original.{ext}"
 
+    def presign_get(self, key: str, expires_seconds: int = 900) -> str:
+        return f"https://example.test/{key}?expires={expires_seconds}"
+
 
 class FailingObjectStore:
     def put_analysis_image(self, org_id, analysis_id, ext, data, content_type) -> str:
         raise StorageError("Could not store analysis image")
+
+    def presign_get(self, key: str, expires_seconds: int = 900) -> str:  # pragma: no cover
+        raise AssertionError("presign must not run when put failed")
 
 
 class FakeAnalysisRepository:
@@ -115,6 +121,9 @@ def test_valid_png_returns_detections_and_persists_analysis():
     assert detection.confidence == 0.9
     assert result.image_s3_key == f"analyses/org-1/{result.id}/original.png"
     assert result.image_content_type == "image/png"
+    assert result.image_url == (
+        f"https://example.test/{result.image_s3_key}?expires=900"
+    )
     assert isinstance(gateway.last_image_array, np.ndarray)
     assert gateway.last_image_array.shape == (480, 640, 3)
     assert gateway.last_image_array.dtype == np.uint8

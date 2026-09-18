@@ -1,7 +1,13 @@
+import numpy as np
 import pytest
 
 from app.core.errors import ModelUnavailableError
-from app.services.model_gateway import FakeModelGateway, KerasModelGateway
+from app.services.model_gateway import (
+    MODEL_INPUT_SIZE,
+    FakeModelGateway,
+    KerasModelGateway,
+    preprocess_mobilenet_input,
+)
 
 
 class _MissingObjectStore:
@@ -38,11 +44,22 @@ def test_unloadable_model_artifact_raises_model_unavailable():
     assert excinfo.value.code == "MODEL_UNAVAILABLE"
 
 
+def test_preprocess_mobilenet_input_resizes_to_batched_float32():
+    image = np.zeros((32, 416, 3), dtype=np.uint8)
+
+    batch = preprocess_mobilenet_input(image)
+
+    assert batch.shape == (1, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE, 3)
+    assert batch.dtype == np.float32
+    assert float(batch.min()) >= 0.0
+    assert float(batch.max()) <= 255.0
+
+
 def test_keras_gateway_loads_artifact_and_predicts_with_mocked_runtime(monkeypatch):
     class FakeModel:
         def predict(self, image_array, verbose=0):
             self.last_input = image_array
-            return [[0.5, 0.5, 0.25, 0.5, 0.88]]
+            return np.array([[0.73]], dtype=np.float32)
 
     class FakeKeras:
         class models:
@@ -54,10 +71,11 @@ def test_keras_gateway_loads_artifact_and_predicts_with_mocked_runtime(monkeypat
     gateway = KerasModelGateway(store=_ArtifactObjectStore())
     model = gateway.ensure_model_loaded()
 
-    raw = gateway.predict([[1, 2, 3]])
+    raw = gateway.predict(np.zeros((32, 416, 3), dtype=np.uint8))
 
-    assert raw == [[0.5, 0.5, 0.25, 0.5, 0.88]]
-    assert model.last_input == [[1, 2, 3]]
+    assert np.allclose(raw, [[0.73]])
+    assert model.last_input.shape == (1, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE, 3)
+    assert model.last_input.dtype == np.float32
 
 
 def test_fake_gateway_predicts_deterministic_raw_output():

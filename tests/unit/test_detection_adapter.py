@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from app.services.detection_adapter import to_detections
@@ -56,3 +57,19 @@ def test_unknown_or_missing_class_index_falls_back_to_nombo():
 
     assert missing_index.label == "NOMBO"
     assert out_of_range.label == "NOMBO"
+
+
+def test_classifier_score_maps_to_full_image_milco_detection():
+    detection = to_detections(np.array([[0.73]], dtype=np.float32), 640, 480)[0]
+
+    assert (detection.x1, detection.y1, detection.x2, detection.y2) == (0.0, 0.0, 640.0, 480.0)
+    assert detection.label == "MILCO"
+    assert detection.confidence == pytest.approx(0.73)
+
+
+def test_classifier_score_below_threshold_maps_to_nombo():
+    detection = to_detections([[0.2]], 100, 50)[0]
+
+    assert detection.label == "NOMBO"
+    assert detection.confidence == pytest.approx(0.8)
+    assert (detection.x1, detection.y1, detection.x2, detection.y2) == (0.0, 0.0, 100.0, 50.0)

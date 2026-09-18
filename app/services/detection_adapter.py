@@ -1,9 +1,15 @@
 from collections.abc import Iterable, Sequence
+from typing import Any
 
-from app.schemas.analysis import Detection
+import numpy as np
+
+from app.schemas.analysis import Detection, DetectionLabel
 
 DEFAULT_LABEL = "NOMBO"
 DEFAULT_LABELS = ("MILCO", "NOMBO")
+CLASSIFIER_POSITIVE_LABEL: DetectionLabel = "MILCO"
+CLASSIFIER_NEGATIVE_LABEL: DetectionLabel = "NOMBO"
+CLASSIFIER_THRESHOLD = 0.5
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -19,23 +25,70 @@ def _label_for(row: Sequence, labels: Sequence[str]) -> str:
     return DEFAULT_LABEL
 
 
+def _classifier_score(raw: Any) -> float | None:
+    """Return a sigmoid score when ``raw`` is a single scalar tensor, else ``None``."""
+    try:
+        values = np.asarray(raw, dtype=np.float64).reshape(-1)
+    except (TypeError, ValueError):
+        return None
+    if values.size != 1:
+        return None
+    return float(values[0])
+
+
+def _from_classifier_score(
+    score: float,
+    image_width: int,
+    image_height: int,
+) -> list[Detection]:
+    """Map a whole-image binary classifier score to one full-frame detection."""
+    positive = score >= CLASSIFIER_THRESHOLD
+    label: DetectionLabel = CLASSIFIER_POSITIVE_LABEL if positive else CLASSIFIER_NEGATIVE_LABEL
+    confidence = score if positive else (1.0 - score)
+    return [
+        Detection(
+            x1=0.0,
+            y1=0.0,
+            x2=float(image_width),
+            y2=float(image_height),
+            confidence=_clamp(confidence, 0.0, 1.0),
+            label=label,
+        )
+    ]
+
+
 def to_detections(
-    raw: Iterable[Sequence] | None,
+    raw: Any,
     image_width: int,
     image_height: int,
     labels: Sequence[str] = DEFAULT_LABELS,
 ) -> list[Detection]:
-    """Map YOLO-like rows to canonical detections.
+    """Map model output to canonical detections.
 
-    Each row is ``(x_center, y_center, width, height, confidence[, class_index])`` with
-    box values normalized to 0..1. Output boxes are pixel coordinates of the uploaded image
-    using half-open intervals ``[x1, x2)`` × ``[y1, y2)`` (inclusive start, exclusive end).
+    Supports:
+
+    - Binary classifier score (shape ``(1,)`` / ``(1, 1)`` / nested scalar) from
+      ``MobileNetV2_fase_congelada.keras`` → one full-image box.
+    - YOLO-like rows ``(x_center, y_center, width, height, confidence[, class_index])``
+      with box values normalized to 0..1 → pixel boxes on the uploaded image using
+      half-open intervals ``[x1, x2)`` × ``[y1, y2)``.
     """
-    if not raw:
+    if raw is None:
+        return []
+
+    score = _classifier_score(raw)
+    if score is not None:
+        return _from_classifier_score(score, image_width, image_height)
+
+    if not isinstance(raw, Iterable) or isinstance(raw, (str, bytes)):
+        return []
+
+    rows = list(raw)
+    if not rows:
         return []
 
     detections: list[Detection] = []
-    for row in raw:
+    for row in rows:
         x_center, y_center, width, height, confidence = (float(value) for value in row[:5])
         detections.append(
             Detection(

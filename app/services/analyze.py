@@ -11,7 +11,7 @@ from PIL import Image, UnidentifiedImageError
 from app.core.config import get_settings
 from app.core.errors import InferenceTimeoutError, InvalidImageError, StorageError, ValidationError
 from app.repositories.analyses import AnalysisRepository, new_analysis_id
-from app.repositories.s3_store import S3ObjectStore
+from app.repositories.s3_store import DEFAULT_PRESIGN_EXPIRES_SECONDS, S3ObjectStore
 from app.schemas.analysis import AnalysisResult
 from app.services.detection_adapter import to_detections
 from app.services.model_gateway import ModelGateway
@@ -114,6 +114,10 @@ class AnalyzeService:
             detections=detections,
             image_content_type=image_content_type,
             image_s3_key=image_s3_key,
+            image_url=self.object_store.presign_get(
+                image_s3_key,
+                expires_seconds=DEFAULT_PRESIGN_EXPIRES_SECONDS,
+            ),
             created_at=created_at,
             inference_ms=inference_ms,
         )

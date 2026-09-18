@@ -3,10 +3,15 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
+import numpy as np
+from PIL import Image
+
 from app.core.errors import ModelUnavailableError
 from app.repositories.s3_store import S3ObjectStore
 
 DEFAULT_FAKE_RAW_OUTPUT: tuple[Sequence, ...] = ((0.5, 0.5, 0.25, 0.5, 0.9),)
+# MobileNetV2_fase_congelada.keras expects RGB floats in 0..255 at this spatial size.
+MODEL_INPUT_SIZE = 96
 
 
 class ModelGateway(Protocol):
@@ -26,6 +31,20 @@ def _import_keras():
     return keras
 
 
+def preprocess_mobilenet_input(image_array: Any) -> np.ndarray:
+    """Resize HWC RGB to a batched ``(1, 96, 96, 3)`` float32 tensor in 0..255."""
+    array = np.asarray(image_array)
+    if array.ndim != 3 or array.shape[-1] != 3:
+        raise ModelUnavailableError("Model expects an HWC RGB image array")
+    if array.dtype != np.uint8:
+        array = np.clip(array, 0, 255).astype(np.uint8)
+    image = Image.fromarray(array, mode="RGB").resize(
+        (MODEL_INPUT_SIZE, MODEL_INPUT_SIZE),
+        Image.Resampling.BILINEAR,
+    )
+    return np.expand_dims(np.asarray(image, dtype=np.float32), axis=0)
+
+
 class KerasModelGateway:
     """Loads the `.keras` artifact from object storage once and keeps it in process memory."""
 
@@ -39,7 +58,8 @@ class KerasModelGateway:
         return self._model
 
     def predict(self, image_array: Any) -> Any:
-        return self.ensure_model_loaded().predict(image_array, verbose=0)
+        batch = preprocess_mobilenet_input(image_array)
+        return self.ensure_model_loaded().predict(batch, verbose=0)
 
     @staticmethod
     def _load_model(payload: bytes) -> Any:
