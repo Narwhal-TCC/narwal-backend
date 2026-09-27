@@ -31,9 +31,26 @@ def png_bytes(width: int = 640, height: int = 480) -> bytes:
     return buffer.getvalue()
 
 
+def _stage(
+    *,
+    label: str = "NOMBO",
+    confidence: float = 0.9,
+    detector_score: float | None = None,
+) -> dict:
+    return {
+        "x1": 240.0,
+        "y1": 120.0,
+        "x2": 400.0,
+        "y2": 360.0,
+        "detector_score": confidence if detector_score is None else detector_score,
+        "label": label,
+        "confidence": confidence,
+    }
+
+
 class ConfigurableModelGateway:
     def __init__(self) -> None:
-        self.raw_output: list = [(0.5, 0.5, 0.25, 0.5, 0.9)]
+        self.raw_output: list = [_stage()]
         self.unavailable = False
 
     def ensure_model_loaded(self):
@@ -43,7 +60,7 @@ class ConfigurableModelGateway:
 
     def predict(self, image_array):
         self.ensure_model_loaded()
-        return [list(row) for row in self.raw_output]
+        return [dict(row) for row in self.raw_output]
 
 
 @pytest.fixture
@@ -278,9 +295,9 @@ def test_list_q_filters_by_campaign_name(analyses_client):
 def test_list_class_filter_milco_and_nombo(analyses_client):
     client, gateway = analyses_client
     headers = auth_headers(client, "operator")
-    gateway.raw_output = [(0.5, 0.5, 0.25, 0.5, 0.9, 0)]
+    gateway.raw_output = [_stage(label="MILCO")]
     milco = post_image(client, headers, png_bytes()).json()
-    gateway.raw_output = [(0.5, 0.5, 0.25, 0.5, 0.9, 1)]
+    gateway.raw_output = [_stage(label="NOMBO")]
     nombo = post_image(client, headers, png_bytes()).json()
 
     milco_list = client.get("/analyses", headers=headers, params={"class": "MILCO"}).json()
@@ -306,7 +323,7 @@ def test_list_filters_respect_org_isolation(analyses_client):
     client, gateway = analyses_client
     owner_headers = auth_headers(client, "operator")
     rival_headers = auth_headers(client, "rival")
-    gateway.raw_output = [(0.5, 0.5, 0.25, 0.5, 0.9, 0)]
+    gateway.raw_output = [_stage(label="MILCO")]
     post_image(client, owner_headers, png_bytes(), campaign_name="North Survey")
 
     rival_list = client.get(
@@ -451,9 +468,9 @@ def test_stats_empty_org_returns_zeros_and_nulls(analyses_client):
 def test_stats_populated_org_aggregates_counts_and_campaign(analyses_client):
     client, gateway = analyses_client
     headers = auth_headers(client, "operator")
-    gateway.raw_output = [(0.5, 0.5, 0.25, 0.5, 0.9, 0)]
+    gateway.raw_output = [_stage(label="MILCO")]
     post_image(client, headers, png_bytes(), campaign_name="Beta").json()
-    gateway.raw_output = [(0.5, 0.5, 0.25, 0.5, 0.9, 1)]
+    gateway.raw_output = [_stage(label="NOMBO")]
     latest = post_image(client, headers, png_bytes(), campaign_name="Alpha").json()
 
     response = client.get("/analyses/stats", headers=headers)

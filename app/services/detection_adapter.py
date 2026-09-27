@@ -1,87 +1,65 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
-
-import numpy as np
 
 from app.schemas.analysis import Detection, DetectionLabel
 
-DEFAULT_LABEL = "NOMBO"
-DEFAULT_LABELS = ("MILCO", "NOMBO")
-CLASSIFIER_POSITIVE_LABEL: DetectionLabel = "MILCO"
-CLASSIFIER_NEGATIVE_LABEL: DetectionLabel = "NOMBO"
-CLASSIFIER_THRESHOLD = 0.5
+DEFAULT_LABEL: DetectionLabel = "NOMBO"
+CLASS_LABELS = frozenset({"MILCO", "NOMBO"})
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
 
 
-def _label_for(row: Sequence, labels: Sequence[str]) -> str:
-    if len(row) < 6:
-        return DEFAULT_LABEL
-    class_index = int(row[5])
-    if 0 <= class_index < len(labels):
-        return labels[class_index]
+def _as_label(value: Any) -> DetectionLabel:
+    if isinstance(value, str) and value in CLASS_LABELS:
+        return value  # type: ignore[return-value]
     return DEFAULT_LABEL
 
 
-def _classifier_score(raw: Any) -> float | None:
-    """Return a sigmoid score when ``raw`` is a single scalar tensor, else ``None``."""
-    try:
-        values = np.asarray(raw, dtype=np.float64).reshape(-1)
-    except (TypeError, ValueError):
-        return None
-    if values.size != 1:
-        return None
-    return float(values[0])
-
-
-def _from_classifier_score(
-    score: float,
+def _from_stage_row(
+    row: Mapping[str, Any],
     image_width: int,
     image_height: int,
-) -> list[Detection]:
-    """Map a whole-image binary classifier score to one full-frame detection."""
-    positive = score >= CLASSIFIER_THRESHOLD
-    label: DetectionLabel = CLASSIFIER_POSITIVE_LABEL if positive else CLASSIFIER_NEGATIVE_LABEL
-    confidence = score if positive else (1.0 - score)
-    return [
-        Detection(
-            x1=0.0,
-            y1=0.0,
-            x2=float(image_width),
-            y2=float(image_height),
-            confidence=_clamp(confidence, 0.0, 1.0),
-            label=label,
-            detector_score=_clamp(confidence, 0.0, 1.0),
-        )
-    ]
+) -> Detection:
+    x1 = _clamp(float(row["x1"]), 0.0, float(image_width))
+    y1 = _clamp(float(row["y1"]), 0.0, float(image_height))
+    x2 = _clamp(float(row["x2"]), 0.0, float(image_width))
+    y2 = _clamp(float(row["y2"]), 0.0, float(image_height))
+    if x2 < x1:
+        x1, x2 = x2, x1
+    if y2 < y1:
+        y1, y2 = y2, y1
+    return Detection(
+        x1=x1,
+        y1=y1,
+        x2=x2,
+        y2=y2,
+        confidence=_clamp(float(row["confidence"]), 0.0, 1.0),
+        label=_as_label(row.get("label")),
+        detector_score=_clamp(float(row["detector_score"]), 0.0, 1.0),
+    )
 
 
 def to_detections(
     raw: Any,
     image_width: int,
     image_height: int,
-    labels: Sequence[str] = DEFAULT_LABELS,
+    labels: Sequence[str] | None = None,  # noqa: ARG001 - kept for call-site compat
 ) -> list[Detection]:
-    """Map model output to canonical detections.
+    """Map two-stage gateway output to canonical detections.
 
-    Supports:
+    Expects an iterable of mappings with pixel boxes and scores::
 
-    - Binary classifier score (shape ``(1,)`` / ``(1, 1)`` / nested scalar) from
-      ``MobileNetV2_fase_congelada.keras`` → one full-image box.
-    - YOLO-like rows ``(x_center, y_center, width, height, confidence[, class_index])``
-      with box values normalized to 0..1 → pixel boxes on the uploaded image using
-      half-open intervals ``[x1, x2)`` × ``[y1, y2)``.
+        {x1, y1, x2, y2, detector_score, label, confidence}
+
+    Empty / ``None`` input yields ``[]``.
     """
+    del labels  # unused; labels come from each stage row
     if raw is None:
         return []
 
-    score = _classifier_score(raw)
-    if score is not None:
-        return _from_classifier_score(score, image_width, image_height)
-
-    if not isinstance(raw, Iterable) or isinstance(raw, (str, bytes)):
+    if not isinstance(raw, Iterable) or isinstance(raw, (str, bytes, Mapping)):
         return []
 
     rows = list(raw)
@@ -90,16 +68,10 @@ def to_detections(
 
     detections: list[Detection] = []
     for row in rows:
-        x_center, y_center, width, height, confidence = (float(value) for value in row[:5])
-        detections.append(
-            Detection(
-                x1=_clamp((x_center - width / 2) * image_width, 0.0, float(image_width)),
-                y1=_clamp((y_center - height / 2) * image_height, 0.0, float(image_height)),
-                x2=_clamp((x_center + width / 2) * image_width, 0.0, float(image_width)),
-                y2=_clamp((y_center + height / 2) * image_height, 0.0, float(image_height)),
-                confidence=_clamp(confidence, 0.0, 1.0),
-                label=_label_for(row, labels),
-                detector_score=_clamp(confidence, 0.0, 1.0),
-            )
-        )
+        if not isinstance(row, Mapping):
+            continue
+        required = ("x1", "y1", "x2", "y2", "detector_score", "confidence")
+        if any(key not in row for key in required):
+            continue
+        detections.append(_from_stage_row(row, image_width, image_height))
     return detections

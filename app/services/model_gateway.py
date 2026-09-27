@@ -9,8 +9,18 @@ from PIL import Image
 from app.core.errors import ModelUnavailableError
 from app.repositories.s3_store import S3ObjectStore
 
-DEFAULT_FAKE_RAW_OUTPUT: tuple[Sequence, ...] = ((0.5, 0.5, 0.25, 0.5, 0.9),)
-# MobileNetV2_fase_congelada.keras expects RGB floats in 0..255 at this spatial size.
+DEFAULT_FAKE_STAGE_OUTPUT: tuple[dict, ...] = (
+    {
+        "x1": 240.0,
+        "y1": 120.0,
+        "x2": 400.0,
+        "y2": 360.0,
+        "detector_score": 0.9,
+        "label": "NOMBO",
+        "confidence": 0.9,
+    },
+)
+# Legacy MobileNet preprocess size (removed from production path in two-stage feature).
 MODEL_INPUT_SIZE = 96
 
 
@@ -74,10 +84,10 @@ class KerasModelGateway:
 
 
 class FakeModelGateway:
-    """Deterministic gateway so tests and smoke runs need no TensorFlow."""
+    """Deterministic gateway so tests and smoke runs need no PyTorch weights."""
 
-    def __init__(self, raw_output: Sequence[Sequence] = DEFAULT_FAKE_RAW_OUTPUT) -> None:
-        self.raw_output = raw_output
+    def __init__(self, raw_output: Sequence[dict] = DEFAULT_FAKE_STAGE_OUTPUT) -> None:
+        self.raw_output = list(raw_output)
         self.loaded = False
         self.last_image_array: Any | None = None
 
@@ -85,7 +95,7 @@ class FakeModelGateway:
         self.loaded = True
         return self
 
-    def predict(self, image_array: Any) -> list[Sequence]:
+    def predict(self, image_array: Any) -> list[dict]:
         self.ensure_model_loaded()
         self.last_image_array = image_array
-        return [list(row) for row in self.raw_output]
+        return [dict(row) for row in self.raw_output]

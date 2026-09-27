@@ -242,7 +242,19 @@ def test_same_org_concurrent_analyses_keep_payloads_isolated():
 
     def run(user_id: str, confidence: float):
         return build_service(
-            gateway=FakeModelGateway(raw_output=[(0.5, 0.5, 0.25, 0.5, confidence)]),
+            gateway=FakeModelGateway(
+                raw_output=[
+                    {
+                        "x1": 240.0,
+                        "y1": 120.0,
+                        "x2": 400.0,
+                        "y2": 360.0,
+                        "detector_score": confidence,
+                        "label": "NOMBO",
+                        "confidence": confidence,
+                    }
+                ]
+            ),
             store=store,
             repository=repository,
         ).analyze_image("org-1", user_id, "image/png", png_bytes())
@@ -347,7 +359,19 @@ def test_invalid_collected_at_is_rejected_without_any_write():
 
 def test_milco_detection_sets_primary_class_and_count():
     repository = FakeAnalysisRepository()
-    gateway = FakeModelGateway(raw_output=[(0.5, 0.5, 0.25, 0.5, 0.9, 0)])
+    gateway = FakeModelGateway(
+        raw_output=[
+            {
+                "x1": 240.0,
+                "y1": 120.0,
+                "x2": 400.0,
+                "y2": 360.0,
+                "detector_score": 0.9,
+                "label": "MILCO",
+                "confidence": 0.9,
+            }
+        ]
+    )
     service = build_service(gateway=gateway, repository=repository)
 
     result = service.analyze_image("org-1", "user-1", "image/png", png_bytes())

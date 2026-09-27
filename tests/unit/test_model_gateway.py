@@ -84,7 +84,17 @@ def test_fake_gateway_predicts_deterministic_raw_output():
     first = gateway.predict(image_array=None)
     second = gateway.predict(image_array=None)
 
-    assert first == second == [[0.5, 0.5, 0.25, 0.5, 0.9]]
+    assert first == second == [
+        {
+            "x1": 240.0,
+            "y1": 120.0,
+            "x2": 400.0,
+            "y2": 360.0,
+            "detector_score": 0.9,
+            "label": "NOMBO",
+            "confidence": 0.9,
+        }
+    ]
     assert gateway.loaded is True
 
 
