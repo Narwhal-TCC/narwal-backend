@@ -41,18 +41,66 @@ def test_unloadable_model_artifact_raises_model_unavailable(monkeypatch):
 def test_either_model_download_failure_is_model_unavailable():
     class PartialStore:
         def __init__(self) -> None:
-            self.calls = 0
+            self.uris: list[str | None] = []
 
         def download_model(self, s3_uri: str | None = None) -> bytes:
-            self.calls += 1
-            if self.calls == 1:
+            self.uris.append(s3_uri)
+            if len(self.uris) == 1:
                 return b"detector-ok"
             raise ModelUnavailableError("classifier missing")
 
-    gateway = TwoStageTorchGateway(store=PartialStore())
+    store = PartialStore()
+    gateway = TwoStageTorchGateway(store=store)
     with pytest.raises(ModelUnavailableError) as excinfo:
         gateway.ensure_model_loaded()
     assert excinfo.value.code == "MODEL_UNAVAILABLE"
+    assert len(store.uris) == 2
+    assert store.uris[0] != store.uris[1]
+
+
+def test_load_models_downloads_and_loads_both_artifacts(monkeypatch):
+    torch = pytest.importorskip("torch")
+    loaded: list[str] = []
+    downloaded: list[str | None] = []
+
+    class DualStore:
+        def download_model(self, s3_uri: str | None = None) -> bytes:
+            downloaded.append(s3_uri)
+            return b"payload"
+
+    class StubModule:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def load_state_dict(self, state):
+            loaded.append(self.name)
+            return None
+
+        def to(self, device):
+            return self
+
+    monkeypatch.setattr("app.services.model_gateway._import_torch", lambda: torch)
+    monkeypatch.setattr(
+        "app.services.model_gateway._load_state_dict",
+        lambda payload, _torch: {"ok": True},
+    )
+    monkeypatch.setattr(
+        "app.services.two_stage_models.build_retinanet",
+        lambda: StubModule("detector"),
+    )
+    monkeypatch.setattr(
+        "app.services.two_stage_models.FusionGhostNetV2MobileNetV2",
+        lambda **kwargs: StubModule("classifier"),
+    )
+
+    gateway = TwoStageTorchGateway(store=DualStore())
+    gateway.ensure_model_loaded()
+
+    assert len(downloaded) == 2
+    assert downloaded[0] != downloaded[1]
+    assert loaded == ["detector", "classifier"]
+    assert gateway._detector is not None
+    assert gateway._classifier is not None
 
 
 def test_fake_gateway_predicts_deterministic_raw_output():
