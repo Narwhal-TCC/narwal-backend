@@ -51,12 +51,20 @@ class S3ObjectStore:
                 return False
             raise
 
-    def seed_model_if_missing(self, local_path: str | Path) -> bool:
-        """Upload a local `.keras` artifact when it is absent from object storage."""
+    def seed_model_if_missing(
+        self,
+        local_path: str | Path,
+        s3_uri: str | None = None,
+    ) -> bool:
+        """Upload a local model artifact when it is absent from object storage."""
         path = Path(local_path)
         if not path.is_file():
             return False
-        bucket, key = parse_s3_uri(get_settings().detector_s3_uri)
+        uri = s3_uri if s3_uri is not None else get_settings().detector_s3_uri
+        try:
+            bucket, key = parse_s3_uri(uri)
+        except ValueError as exc:
+            raise StorageError(f"Model S3 URI is not configured: {uri!r}") from exc
         if self.object_exists(bucket, key):
             return False
         try:
@@ -83,8 +91,8 @@ class S3ObjectStore:
             kwargs["CreateBucketConfiguration"] = {"LocationConstraint": region}
         self.client.create_bucket(**kwargs)
 
-    def download_model(self) -> bytes:
-        uri = get_settings().detector_s3_uri
+    def download_model(self, s3_uri: str | None = None) -> bytes:
+        uri = s3_uri if s3_uri is not None else get_settings().detector_s3_uri
         try:
             bucket, key = parse_s3_uri(uri)
         except ValueError as exc:

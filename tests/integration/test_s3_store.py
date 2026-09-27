@@ -6,13 +6,15 @@ from app.core.errors import ModelUnavailableError
 from app.repositories.s3_store import S3ObjectStore
 
 BUCKET = "narwal-test"
-MODEL_KEY = "models/v1/retinanet_melhor.pt"
+DETECTOR_KEY = "models/v1/retinanet_melhor.pt"
+CLASSIFIER_KEY = "models/v1/fusion_ghostnetv2_mobilenetv2_melhor.pt"
 
 
 @pytest.fixture
 def local_env(monkeypatch):
     monkeypatch.setenv("S3_BUCKET", BUCKET)
-    monkeypatch.setenv("DETECTOR_S3_URI", f"s3://{BUCKET}/{MODEL_KEY}")
+    monkeypatch.setenv("DETECTOR_S3_URI", f"s3://{BUCKET}/{DETECTOR_KEY}")
+    monkeypatch.setenv("CLASSIFIER_S3_URI", f"s3://{BUCKET}/{CLASSIFIER_KEY}")
     monkeypatch.delenv("S3_ENDPOINT_URL", raising=False)
     monkeypatch.delenv("S3_PUBLIC_ENDPOINT", raising=False)
     get_settings.cache_clear()
@@ -44,9 +46,16 @@ def test_put_analysis_image_round_trip_returns_stored_bytes(store):
 
 
 def test_download_model_returns_object_bytes(store):
-    store.client.put_object(Bucket=BUCKET, Key=MODEL_KEY, Body=b"pt-artifact")
+    store.client.put_object(Bucket=BUCKET, Key=DETECTOR_KEY, Body=b"pt-artifact")
 
     assert store.download_model() == b"pt-artifact"
+
+
+def test_download_model_accepts_explicit_uri(store):
+    store.client.put_object(Bucket=BUCKET, Key=CLASSIFIER_KEY, Body=b"fusion-bytes")
+    uri = f"s3://{BUCKET}/{CLASSIFIER_KEY}"
+
+    assert store.download_model(uri) == b"fusion-bytes"
 
 
 def test_download_model_missing_key_raises_model_unavailable(store):
@@ -76,19 +85,33 @@ def test_seed_model_if_missing_uploads_local_file(store, tmp_path):
     uploaded = store.seed_model_if_missing(model_path)
 
     assert uploaded is True
-    stored = store.client.get_object(Bucket=BUCKET, Key=MODEL_KEY)
+    stored = store.client.get_object(Bucket=BUCKET, Key=DETECTOR_KEY)
     assert stored["Body"].read() == b"pt-artifact"
+
+
+def test_seed_dual_artifacts_to_distinct_keys(store, tmp_path):
+    detector = tmp_path / "retinanet_melhor.pt"
+    classifier = tmp_path / "fusion.pt"
+    detector.write_bytes(b"detector-bytes")
+    classifier.write_bytes(b"classifier-bytes")
+    detector_uri = f"s3://{BUCKET}/{DETECTOR_KEY}"
+    classifier_uri = f"s3://{BUCKET}/{CLASSIFIER_KEY}"
+
+    assert store.seed_model_if_missing(detector, detector_uri) is True
+    assert store.seed_model_if_missing(classifier, classifier_uri) is True
+    assert store.download_model(detector_uri) == b"detector-bytes"
+    assert store.download_model(classifier_uri) == b"classifier-bytes"
 
 
 def test_seed_model_if_missing_is_idempotent(store, tmp_path):
     model_path = tmp_path / "retinanet_melhor.pt"
     model_path.write_bytes(b"pt-artifact")
-    store.client.put_object(Bucket=BUCKET, Key=MODEL_KEY, Body=b"existing")
+    store.client.put_object(Bucket=BUCKET, Key=DETECTOR_KEY, Body=b"existing")
 
     uploaded = store.seed_model_if_missing(model_path)
 
     assert uploaded is False
-    stored = store.client.get_object(Bucket=BUCKET, Key=MODEL_KEY)
+    stored = store.client.get_object(Bucket=BUCKET, Key=DETECTOR_KEY)
     assert stored["Body"].read() == b"existing"
 
 

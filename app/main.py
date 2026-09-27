@@ -25,11 +25,16 @@ def bootstrap() -> None:
         logger.warning("Could not ensure the object storage bucket", exc_info=True)
     try:
         settings = get_settings()
-        local_model_path = settings.detector_local_path
-        if local_model_path and store.seed_model_if_missing(local_model_path):
+        if settings.detector_local_path and store.seed_model_if_missing(
+            settings.detector_local_path, settings.detector_s3_uri
+        ):
             logger.info("Uploaded local detector artifact to object storage")
+        if settings.classifier_local_path and store.seed_model_if_missing(
+            settings.classifier_local_path, settings.classifier_s3_uri
+        ):
+            logger.info("Uploaded local classifier artifact to object storage")
     except Exception:
-        logger.warning("Could not seed model artifact to object storage", exc_info=True)
+        logger.warning("Could not seed model artifacts to object storage", exc_info=True)
     try:
         run_seed()
     except Exception:
