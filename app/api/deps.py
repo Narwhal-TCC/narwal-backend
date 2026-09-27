@@ -12,7 +12,7 @@ from app.repositories.users import UserRepository
 from app.services.analyze import AnalyzeService
 from app.services.auth import AuthService
 from app.services.history import HistoryService
-from app.services.model_gateway import KerasModelGateway, ModelGateway
+from app.services.model_gateway import ModelGateway, TwoStageTorchGateway
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -59,7 +59,7 @@ def get_analysis_repository() -> AnalysisRepository:
 @lru_cache
 def get_model_gateway() -> ModelGateway:
     # Cached so the loaded model stays in process memory across requests.
-    return KerasModelGateway(store=get_object_store())
+    return TwoStageTorchGateway(store=get_object_store())
 
 
 def get_analyze_service(
