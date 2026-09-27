@@ -70,6 +70,7 @@ services:
       CLASSIFIER_LOCAL_PATH: /app/data/models/fusion_ghostnetv2_mobilenetv2_melhor.pt
       CLASSIFIER_S3_URI: s3://narwal/models/v1/fusion_ghostnetv2_mobilenetv2_melhor.pt
       INFERENCE_TIMEOUT_SECONDS: "60"
+      DETECTOR_SCORE_THRESHOLD: "0.5"
     volumes:
       - ./data:/app/data:ro
     depends_on:

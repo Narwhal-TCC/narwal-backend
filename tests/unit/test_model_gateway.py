@@ -169,6 +169,40 @@ def test_predict_with_stubbed_models_returns_stage_rows(monkeypatch):
     )
 
 
+def test_predict_skips_boxes_below_training_detector_threshold(monkeypatch):
+    torch = pytest.importorskip("torch")
+    classify_calls = 0
+
+    class MultiBoxDetector:
+        def eval(self):
+            return self
+
+        def __call__(self, images):
+            boxes = torch.tensor([[10.0, 20.0, 30.0, 40.0], [50.0, 50.0, 60.0, 60.0]])
+            scores = torch.tensor([0.87, 0.49])
+            return [{"boxes": boxes, "scores": scores}]
+
+    class CountingClassifier:
+        def eval(self):
+            return self
+
+        def __call__(self, batch):
+            nonlocal classify_calls
+            classify_calls += 1
+            return torch.tensor([[2.0, 0.1]])
+
+    gateway = TwoStageTorchGateway(store=_MissingObjectStore())
+    gateway._detector = MultiBoxDetector()
+    gateway._classifier = CountingClassifier()
+    gateway._device = torch.device("cpu")
+
+    rows = gateway.predict(np.zeros((80, 100, 3), dtype=np.uint8))
+
+    assert len(rows) == 1
+    assert rows[0]["detector_score"] == pytest.approx(0.87)
+    assert classify_calls == 1
+
+
 def test_predict_empty_boxes_returns_empty_list(monkeypatch):
     torch = pytest.importorskip("torch")
 

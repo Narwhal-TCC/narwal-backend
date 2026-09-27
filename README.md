@@ -78,3 +78,4 @@ Tests use moto and a fake model gateway, so neither AWS nor real `.pt` weights a
 For real two-stage inference, install the project deps (`torch`, `torchvision`, `timm`) and ensure
 both artifacts are available via the configured S3 URIs (or local seed paths).
 `TwoStageTorchGateway` returns `MODEL_UNAVAILABLE` until both models download and load.
+RetinaNet uses `DETECTOR_SCORE_THRESHOLD` (default **0.5**, same as training `score_thresh`) before running the fusion classifier.

@@ -99,8 +99,11 @@ class TwoStageTorchGateway:
             boxes = pred["boxes"].detach().cpu().numpy()
             scores = pred["scores"].detach().cpu().numpy()
 
+            score_threshold = get_settings().detector_score_threshold
             results: list[dict] = []
             for box, score in zip(boxes, scores, strict=False):
+                if float(score) < score_threshold:
+                    continue
                 xmin, ymin, xmax, ymax = (float(v) for v in box)
                 bw, bh = xmax - xmin, ymax - ymin
                 xmin_m = max(0.0, xmin - bw * CROP_MARGIN)

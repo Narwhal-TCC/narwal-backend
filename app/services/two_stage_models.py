@@ -18,6 +18,8 @@ NUM_CLASSES_CLS = 2
 CLASS_NAMES = ("MILCO", "NOMBO")
 FUSION_IMG_SIZE = 224
 CROP_MARGIN = 0.15
+# RetinaNet eval filter from the training notebook (score_thresh=0.5).
+DETECTOR_SCORE_THRESHOLD = 0.5
 
 
 def build_retinanet(num_classes: int = NUM_CLASSES_DET) -> nn.Module:

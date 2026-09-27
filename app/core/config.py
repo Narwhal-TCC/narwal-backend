@@ -50,6 +50,13 @@ class Settings(BaseSettings):
         alias="CLASSIFIER_S3_URI",
     )
     inference_timeout_seconds: int = Field(default=60, alias="INFERENCE_TIMEOUT_SECONDS")
+    detector_score_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        alias="DETECTOR_SCORE_THRESHOLD",
+        description="Minimum RetinaNet score; must match training eval (notebook score_thresh=0.5).",
+    )
 
     # Analysis list / metadata bounds
     list_scan_cap: int = Field(default=500, alias="LIST_SCAN_CAP")
