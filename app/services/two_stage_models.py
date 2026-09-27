@@ -1,4 +1,7 @@
-"""Architectures matching the RetinaNet + GhostNetV2/MobileNetV2 training notebook."""
+"""Architectures matching the RetinaNet + GhostNetV2/MobileNetV2 training notebook.
+
+AD-005: production analyze uses these dual PyTorch models (supersedes AD-001 `.keras` artifact).
+"""
 
 from __future__ import annotations
 
