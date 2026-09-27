@@ -17,6 +17,7 @@ class Detection(BaseModel):
     y2: float
     confidence: float = Field(ge=0.0, le=1.0)
     label: DetectionLabel
+    detector_score: float = Field(ge=0.0, le=1.0)
 
 
 class AnalysisResult(BaseModel):

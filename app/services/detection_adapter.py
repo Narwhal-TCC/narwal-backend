@@ -53,6 +53,7 @@ def _from_classifier_score(
             y2=float(image_height),
             confidence=_clamp(confidence, 0.0, 1.0),
             label=label,
+            detector_score=_clamp(confidence, 0.0, 1.0),
         )
     ]
 
@@ -98,6 +99,7 @@ def to_detections(
                 y2=_clamp((y_center + height / 2) * image_height, 0.0, float(image_height)),
                 confidence=_clamp(confidence, 0.0, 1.0),
                 label=_label_for(row, labels),
+                detector_score=_clamp(confidence, 0.0, 1.0),
             )
         )
     return detections

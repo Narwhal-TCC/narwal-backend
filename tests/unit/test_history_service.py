@@ -4,7 +4,15 @@ from app.core.errors import AnalysisNotFoundError, ValidationError
 from app.services.history import HistoryService
 
 DETECTIONS = [
-    {"x1": 10.0, "y1": 20.0, "x2": 30.0, "y2": 40.0, "confidence": 0.75, "label": "NOMBO"}
+    {
+        "x1": 10.0,
+        "y1": 20.0,
+        "x2": 30.0,
+        "y2": 40.0,
+        "confidence": 0.75,
+        "label": "NOMBO",
+        "detector_score": 0.8,
+    }
 ]
 
 

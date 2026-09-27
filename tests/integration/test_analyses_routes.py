@@ -141,7 +141,8 @@ def test_analyze_returns_detections_for_authenticated_member(analyses_client):
             "x2": 400.0,
             "y2": 360.0,
             "confidence": 0.9,
-                "label": "NOMBO",
+            "label": "NOMBO",
+            "detector_score": 0.9,
         }
     ]
 

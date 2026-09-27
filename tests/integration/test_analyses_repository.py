@@ -6,7 +6,15 @@ from app.repositories.analyses import AnalysisRepository, new_analysis_id
 from app.repositories.users import ensure_table
 
 DETECTIONS = [
-    {"x1": 12.5, "y1": 30.0, "x2": 80.25, "y2": 140.75, "confidence": 0.87, "label": "MILCO"}
+    {
+        "x1": 12.5,
+        "y1": 30.0,
+        "x2": 80.25,
+        "y2": 140.75,
+        "confidence": 0.87,
+        "label": "MILCO",
+        "detector_score": 0.91,
+    }
 ]
 
 

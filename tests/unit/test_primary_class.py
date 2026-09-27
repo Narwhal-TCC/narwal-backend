@@ -7,7 +7,15 @@ DetectionLabel = Literal["MILCO", "NOMBO"]
 
 
 def _detection(label: DetectionLabel, confidence: float) -> Detection:
-    return Detection(x1=0.0, y1=0.0, x2=10.0, y2=10.0, confidence=confidence, label=label)
+    return Detection(
+        x1=0.0,
+        y1=0.0,
+        x2=10.0,
+        y2=10.0,
+        confidence=confidence,
+        label=label,
+        detector_score=confidence,
+    )
 
 
 def test_empty_detections_yield_null_primary_class():
