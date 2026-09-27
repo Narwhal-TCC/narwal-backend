@@ -19,11 +19,11 @@ docker compose up --build
 | MinIO console | http://localhost:9001 | `minioadmin` / `minioadmin` |
 | DynamoDB Local | http://localhost:8000 | `-inMemory`, so data resets when the container is recreated |
 
-Startup runs a best-effort bootstrap: ensure the bucket, upload the local `.keras` artifact from
-`MODEL_LOCAL_PATH` when it is missing in object storage, seed the platform admin from
-`PLATFORM_ADMIN_*` and a demo member from `SEED_DEMO_*`, and preload the model. Each step logs a
-warning and the API still serves if a backing store is not ready yet. DynamoDB Local runs in
-memory, so re-seeding happens on every `docker compose up`.
+Startup runs a best-effort bootstrap: ensure the bucket, upload the local RetinaNet and fusion
+`.pt` artifacts from `DETECTOR_LOCAL_PATH` / `CLASSIFIER_LOCAL_PATH` when missing in object storage,
+seed the platform admin from `PLATFORM_ADMIN_*` and a demo member from `SEED_DEMO_*`, and preload
+both models. Each step logs a warning and the API still serves if a backing store is not ready yet.
+DynamoDB Local runs in memory, so re-seeding happens on every `docker compose up`.
 
 ## Environment variables
 
@@ -53,9 +53,9 @@ curl -s http://localhost:8080/analyses -H "Authorization: Bearer $TOKEN"
 curl -s http://localhost:8080/analyses/$ANALYSIS_ID -H "Authorization: Bearer $TOKEN"
 ```
 
-Locally, startup uploads `data/MobileNetV2_fase_congelada.keras` to `MODEL_S3_URI` when the object
-is missing. Without that file, upload the artifact to MinIO manually (console or
-`mc cp model.keras local/narwal/models/v1/model.keras`) or analyze returns `503 MODEL_UNAVAILABLE`.
+Locally, startup uploads `data/models/retinanet_melhor.pt` and
+`data/models/fusion_ghostnetv2_mobilenetv2_melhor.pt` to their S3 URIs when missing. Without those
+files, upload them to MinIO manually or analyze returns `503 MODEL_UNAVAILABLE`.
 
 | Failure | Status | Code |
 | ------- | ------ | ---- |
@@ -73,12 +73,8 @@ python -m pytest tests/unit tests/integration -q
 python -m ruff check app tests
 ```
 
-Tests use moto and a fake model gateway, so neither AWS nor TensorFlow is required.
+Tests use moto and a fake model gateway, so neither AWS nor real `.pt` weights are required in CI.
 
-For real `.keras` inference on a host that will load the artifact, install the optional extra:
-
-```bash
-pip install -e ".[inference]"
-```
-
-The API still runs without it; `KerasModelGateway` returns `MODEL_UNAVAILABLE` until TensorFlow/Keras is present and the object is loadable.
+For real two-stage inference, install the project deps (`torch`, `torchvision`, `timm`) and ensure
+both artifacts are available via the configured S3 URIs (or local seed paths).
+`TwoStageTorchGateway` returns `MODEL_UNAVAILABLE` until both models download and load.
