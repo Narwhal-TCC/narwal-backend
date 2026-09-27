@@ -56,7 +56,7 @@ class S3ObjectStore:
         path = Path(local_path)
         if not path.is_file():
             return False
-        bucket, key = parse_s3_uri(get_settings().model_s3_uri)
+        bucket, key = parse_s3_uri(get_settings().detector_s3_uri)
         if self.object_exists(bucket, key):
             return False
         try:
@@ -84,7 +84,7 @@ class S3ObjectStore:
         self.client.create_bucket(**kwargs)
 
     def download_model(self) -> bytes:
-        uri = get_settings().model_s3_uri
+        uri = get_settings().detector_s3_uri
         try:
             bucket, key = parse_s3_uri(uri)
         except ValueError as exc:

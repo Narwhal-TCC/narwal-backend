@@ -32,14 +32,22 @@ class Settings(BaseSettings):
     seed_demo_password: str = Field(default="demo", alias="SEED_DEMO_PASSWORD")
     seed_demo_org_id: str = Field(default="demo", alias="SEED_DEMO_ORG_ID")
 
-    # Model / inference
-    model_local_path: str | None = Field(
-        default="data/MobileNetV2_fase_congelada.keras",
-        alias="MODEL_LOCAL_PATH",
+    # Model / inference (dual-stage PyTorch)
+    detector_local_path: str | None = Field(
+        default="data/models/retinanet_melhor.pt",
+        alias="DETECTOR_LOCAL_PATH",
     )
-    model_s3_uri: str = Field(
-        default="s3://narwal/models/v1/model.keras",
-        alias="MODEL_S3_URI",
+    detector_s3_uri: str = Field(
+        default="s3://narwal/models/v1/retinanet_melhor.pt",
+        alias="DETECTOR_S3_URI",
+    )
+    classifier_local_path: str | None = Field(
+        default="data/models/fusion_ghostnetv2_mobilenetv2_melhor.pt",
+        alias="CLASSIFIER_LOCAL_PATH",
+    )
+    classifier_s3_uri: str = Field(
+        default="s3://narwal/models/v1/fusion_ghostnetv2_mobilenetv2_melhor.pt",
+        alias="CLASSIFIER_S3_URI",
     )
     inference_timeout_seconds: int = Field(default=60, alias="INFERENCE_TIMEOUT_SECONDS")
 

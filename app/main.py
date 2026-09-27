@@ -24,9 +24,10 @@ def bootstrap() -> None:
     except Exception:
         logger.warning("Could not ensure the object storage bucket", exc_info=True)
     try:
-        local_model_path = get_settings().model_local_path
+        settings = get_settings()
+        local_model_path = settings.detector_local_path
         if local_model_path and store.seed_model_if_missing(local_model_path):
-            logger.info("Uploaded local model artifact to object storage")
+            logger.info("Uploaded local detector artifact to object storage")
     except Exception:
         logger.warning("Could not seed model artifact to object storage", exc_info=True)
     try:

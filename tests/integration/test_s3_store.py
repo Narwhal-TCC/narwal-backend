@@ -6,13 +6,13 @@ from app.core.errors import ModelUnavailableError
 from app.repositories.s3_store import S3ObjectStore
 
 BUCKET = "narwal-test"
-MODEL_KEY = "models/v1/model.keras"
+MODEL_KEY = "models/v1/retinanet_melhor.pt"
 
 
 @pytest.fixture
 def local_env(monkeypatch):
     monkeypatch.setenv("S3_BUCKET", BUCKET)
-    monkeypatch.setenv("MODEL_S3_URI", f"s3://{BUCKET}/{MODEL_KEY}")
+    monkeypatch.setenv("DETECTOR_S3_URI", f"s3://{BUCKET}/{MODEL_KEY}")
     monkeypatch.delenv("S3_ENDPOINT_URL", raising=False)
     monkeypatch.delenv("S3_PUBLIC_ENDPOINT", raising=False)
     get_settings.cache_clear()
@@ -44,9 +44,9 @@ def test_put_analysis_image_round_trip_returns_stored_bytes(store):
 
 
 def test_download_model_returns_object_bytes(store):
-    store.client.put_object(Bucket=BUCKET, Key=MODEL_KEY, Body=b"keras-artifact")
+    store.client.put_object(Bucket=BUCKET, Key=MODEL_KEY, Body=b"pt-artifact")
 
-    assert store.download_model() == b"keras-artifact"
+    assert store.download_model() == b"pt-artifact"
 
 
 def test_download_model_missing_key_raises_model_unavailable(store):
@@ -58,7 +58,7 @@ def test_download_model_missing_key_raises_model_unavailable(store):
 
 
 def test_download_model_with_misconfigured_uri_raises_model_unavailable(local_env):
-    local_env.setenv("MODEL_S3_URI", "")
+    local_env.setenv("DETECTOR_S3_URI", "")
     get_settings.cache_clear()
     with mock_aws():
         store = S3ObjectStore()
@@ -70,19 +70,19 @@ def test_download_model_with_misconfigured_uri_raises_model_unavailable(local_en
 
 
 def test_seed_model_if_missing_uploads_local_file(store, tmp_path):
-    model_path = tmp_path / "model.keras"
-    model_path.write_bytes(b"keras-artifact")
+    model_path = tmp_path / "retinanet_melhor.pt"
+    model_path.write_bytes(b"pt-artifact")
 
     uploaded = store.seed_model_if_missing(model_path)
 
     assert uploaded is True
     stored = store.client.get_object(Bucket=BUCKET, Key=MODEL_KEY)
-    assert stored["Body"].read() == b"keras-artifact"
+    assert stored["Body"].read() == b"pt-artifact"
 
 
 def test_seed_model_if_missing_is_idempotent(store, tmp_path):
-    model_path = tmp_path / "model.keras"
-    model_path.write_bytes(b"keras-artifact")
+    model_path = tmp_path / "retinanet_melhor.pt"
+    model_path.write_bytes(b"pt-artifact")
     store.client.put_object(Bucket=BUCKET, Key=MODEL_KEY, Body=b"existing")
 
     uploaded = store.seed_model_if_missing(model_path)
@@ -93,7 +93,7 @@ def test_seed_model_if_missing_is_idempotent(store, tmp_path):
 
 
 def test_seed_model_if_missing_noops_when_local_file_absent(store, tmp_path):
-    uploaded = store.seed_model_if_missing(tmp_path / "missing.keras")
+    uploaded = store.seed_model_if_missing(tmp_path / "missing.pt")
 
     assert uploaded is False
 

@@ -65,8 +65,10 @@ services:
       SEED_DEMO_USERNAME: demo
       SEED_DEMO_PASSWORD: demo
       SEED_DEMO_ORG_ID: demo
-      MODEL_LOCAL_PATH: /app/data/MobileNetV2_fase_congelada.keras
-      MODEL_S3_URI: s3://narwal/models/v1/model.keras
+      DETECTOR_LOCAL_PATH: /app/data/models/retinanet_melhor.pt
+      DETECTOR_S3_URI: s3://narwal/models/v1/retinanet_melhor.pt
+      CLASSIFIER_LOCAL_PATH: /app/data/models/fusion_ghostnetv2_mobilenetv2_melhor.pt
+      CLASSIFIER_S3_URI: s3://narwal/models/v1/fusion_ghostnetv2_mobilenetv2_melhor.pt
       INFERENCE_TIMEOUT_SECONDS: "60"
     volumes:
       - ./data:/app/data:ro
