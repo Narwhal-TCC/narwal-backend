@@ -11,15 +11,20 @@ def test_get_settings_is_cached(monkeypatch):
     assert first is second
 
 
+def test_sqlite_path_loads_from_env(monkeypatch):
+    monkeypatch.setenv("SQLITE_PATH", "/tmp/custom-narwal.db")
+    get_settings.cache_clear()
+    settings = get_settings()
+    assert settings.sqlite_path == "/tmp/custom-narwal.db"
+
+
 def test_endpoint_urls_load_from_env(monkeypatch):
     monkeypatch.setenv("S3_ENDPOINT_URL", "http://minio:9000")
     monkeypatch.setenv("S3_PUBLIC_ENDPOINT", "http://localhost:9000")
-    monkeypatch.setenv("DYNAMODB_ENDPOINT_URL", "http://dynamodb:8000")
     get_settings.cache_clear()
     settings = get_settings()
     assert settings.s3_endpoint_url == "http://minio:9000"
     assert settings.s3_public_endpoint == "http://localhost:9000"
-    assert settings.dynamodb_endpoint_url == "http://dynamodb:8000"
 
 
 def test_list_scan_cap_loads_from_env(monkeypatch):
@@ -33,7 +38,7 @@ def test_local_defaults_are_safe_for_dev():
     env_keys = (
         "S3_ENDPOINT_URL",
         "S3_PUBLIC_ENDPOINT",
-        "DYNAMODB_ENDPOINT_URL",
+        "SQLITE_PATH",
         "JWT_SECRET",
     )
     saved = {key: os.environ.pop(key, None) for key in env_keys}
@@ -41,7 +46,7 @@ def test_local_defaults_are_safe_for_dev():
     try:
         settings = Settings()
         assert settings.s3_bucket == "narwal"
-        assert settings.ddb_table == "narwal"
+        assert settings.sqlite_path == "db/narwal.db"
         assert settings.aws_region == "us-east-1"
         assert settings.inference_timeout_seconds == 60
         assert settings.list_scan_cap == 500

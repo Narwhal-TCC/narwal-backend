@@ -17,8 +17,7 @@ class Settings(BaseSettings):
     s3_force_path_style: bool = Field(default=True, alias="S3_FORCE_PATH_STYLE")
     s3_bucket: str = Field(default="narwal", alias="S3_BUCKET")
 
-    dynamodb_endpoint_url: str | None = Field(default=None, alias="DYNAMODB_ENDPOINT_URL")
-    ddb_table: str = Field(default="narwal", alias="DDB_TABLE")
+    sqlite_path: str = Field(default="db/narwal.db", alias="SQLITE_PATH")
 
     # Auth
     jwt_secret: str = Field(default="dev-only-change-me", alias="JWT_SECRET")
