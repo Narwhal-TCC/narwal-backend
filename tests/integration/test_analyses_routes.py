@@ -1,5 +1,7 @@
+import sqlite3
 from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 
 import boto3
 import pytest
@@ -10,15 +12,17 @@ from PIL import Image
 from app.api.deps import (
     get_analyze_service,
     get_history_service,
+    get_model_gateway,
+    get_object_store,
     get_user_repository,
 )
 from app.core.config import get_settings
 from app.core.errors import ModelUnavailableError
-from app.core.security import hash_password
+from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.repositories.analyses import AnalysisRepository
 from app.repositories.s3_store import S3ObjectStore
-from app.repositories.users import UserRepository, ensure_table
+from app.repositories.users import UserRepository
 from app.services.analyze import AnalyzeService
 from app.services.history import HistoryService
 
@@ -64,16 +68,17 @@ class ConfigurableModelGateway:
 
 
 @pytest.fixture
-def analyses_client(monkeypatch):
+def analyses_client(monkeypatch, tmp_path: Path):
+    db_path = tmp_path / "analyses-routes.db"
+    monkeypatch.setenv("SQLITE_PATH", str(db_path))
     monkeypatch.setenv("JWT_SECRET", "integration-test-secret-at-least-32-bytes")
     monkeypatch.setenv("S3_BUCKET", BUCKET)
     monkeypatch.delenv("S3_ENDPOINT_URL", raising=False)
     monkeypatch.delenv("S3_PUBLIC_ENDPOINT", raising=False)
     get_settings.cache_clear()
+    get_object_store.cache_clear()
     with mock_aws():
-        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = ensure_table(dynamodb, "analyses-routes-test")
-        users = UserRepository(table)
+        users = UserRepository(str(db_path))
         users.put_org("org-1", "Sonar Team")
         users.put_user("user-1", "org-1", "operator", hash_password("pw"), "member")
         users.put_org("org-2", "Rival Team")
@@ -87,12 +92,14 @@ def analyses_client(monkeypatch):
             "platform_admin",
         )
 
-        object_store = S3ObjectStore(bucket=BUCKET)
+        s3 = boto3.client("s3", region_name="us-east-1")
+        object_store = S3ObjectStore(client=s3, bucket=BUCKET)
         object_store.ensure_bucket()
-        analyses = AnalysisRepository(table)
+        analyses = AnalysisRepository(str(db_path))
         gateway = ConfigurableModelGateway()
 
         app.dependency_overrides[get_user_repository] = lambda: users
+        app.dependency_overrides[get_model_gateway] = lambda: gateway
         app.dependency_overrides[get_analyze_service] = lambda: AnalyzeService(
             model_gateway=gateway,
             object_store=object_store,
@@ -521,3 +528,163 @@ def test_platform_admin_cannot_list_or_get_another_org_analyses(analyses_client)
     assert admin_created["org_id"] == "platform"
     admin_list = client.get("/analyses", headers=admin_headers).json()
     assert [item["id"] for item in admin_list["items"]] == [admin_created["id"]]
+
+
+def test_analyze_stored_image_is_readable_from_object_storage(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(client, headers, png_bytes())
+    body = response.json()
+    assert body["image_s3_key"]
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    payload = s3.get_object(Bucket=BUCKET, Key=body["image_s3_key"])["Body"].read()
+    assert len(payload) > 0
+
+
+def _corrupt_analyses_client(monkeypatch, tmp_path: Path):
+    corrupt = tmp_path / "corrupt-analyses.db"
+    corrupt.write_bytes(b"NOT SQLITE")
+    monkeypatch.setenv("SQLITE_PATH", str(corrupt))
+    monkeypatch.setenv("JWT_SECRET", "integration-test-secret-at-least-32-bytes")
+    monkeypatch.setenv("S3_BUCKET", BUCKET)
+    monkeypatch.delenv("S3_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("S3_PUBLIC_ENDPOINT", raising=False)
+    get_settings.cache_clear()
+    get_object_store.cache_clear()
+    users = UserRepository(str(corrupt))
+    analyses = AnalysisRepository(str(corrupt))
+    gateway = ConfigurableModelGateway()
+    with mock_aws():
+        s3 = boto3.client("s3", region_name="us-east-1")
+        object_store = S3ObjectStore(client=s3, bucket=BUCKET)
+        object_store.ensure_bucket()
+        app.dependency_overrides[get_user_repository] = lambda: users
+        app.dependency_overrides[get_model_gateway] = lambda: gateway
+        app.dependency_overrides[get_analyze_service] = lambda: AnalyzeService(
+            model_gateway=gateway,
+            object_store=object_store,
+            repository=analyses,
+            timeout_seconds=5,
+        )
+        app.dependency_overrides[get_history_service] = lambda: HistoryService(
+            repository=analyses,
+            object_store=object_store,
+        )
+        with TestClient(app) as client:
+            yield client
+        app.dependency_overrides.clear()
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def corrupt_analyses_client(monkeypatch, tmp_path):
+    yield from _corrupt_analyses_client(monkeypatch, tmp_path)
+
+
+def test_corrupt_database_returns_store_unavailable_on_analysis_routes(
+    corrupt_analyses_client,
+):
+    client = corrupt_analyses_client
+    token = create_access_token("user-1", "org-1", "member")
+    headers = {"Authorization": f"Bearer {token}"}
+    analysis_id = "01J0000000000000000000000"
+
+    post = post_image(client, headers, png_bytes())
+    assert post.status_code == 503
+    assert post.json()["code"] == "STORE_UNAVAILABLE"
+
+    listing = client.get("/analyses", headers=headers)
+    assert listing.status_code == 503
+    assert listing.json()["code"] == "STORE_UNAVAILABLE"
+
+    stats = client.get("/analyses/stats", headers=headers)
+    assert stats.status_code == 503
+    assert stats.json()["code"] == "STORE_UNAVAILABLE"
+
+    detail = client.get(f"/analyses/{analysis_id}", headers=headers)
+    assert detail.status_code == 503
+    assert detail.json()["code"] == "STORE_UNAVAILABLE"
+
+    patch_response = client.patch(
+        f"/analyses/{analysis_id}",
+        headers=headers,
+        json={"review_status": "confirmed"},
+    )
+    assert patch_response.status_code == 503
+    assert patch_response.json()["code"] == "STORE_UNAVAILABLE"
+
+
+def test_failed_insert_returns_503_and_leaves_list_unchanged(
+    monkeypatch, tmp_path: Path
+):
+    db_path = tmp_path / "failed-insert.db"
+    monkeypatch.setenv("SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("JWT_SECRET", "integration-test-secret-at-least-32-bytes")
+    monkeypatch.setenv("S3_BUCKET", BUCKET)
+    monkeypatch.delenv("S3_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("S3_PUBLIC_ENDPOINT", raising=False)
+    get_settings.cache_clear()
+    get_object_store.cache_clear()
+    users = UserRepository(str(db_path))
+    users.put_org("org-1", "Sonar Team")
+    users.put_user("user-1", "org-1", "operator", hash_password("pw"), "member")
+    analyses = AnalysisRepository(str(db_path))
+    gateway = ConfigurableModelGateway()
+
+    class _ConnectionProxy:
+        def __init__(self, inner: sqlite3.Connection) -> None:
+            self._inner = inner
+
+        def execute(self, sql, params=(), /, **kwargs):
+            if "INSERT INTO analyses" in str(sql):
+                raise sqlite3.OperationalError("forced failure")
+            return self._inner.execute(sql, params, **kwargs)
+
+        def commit(self):
+            return self._inner.commit()
+
+        def rollback(self):
+            return self._inner.rollback()
+
+        def close(self):
+            return self._inner.close()
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    real_with_connection = analyses._with_connection
+
+    def failing_with_connection():
+        return _ConnectionProxy(real_with_connection())
+
+    analyses._with_connection = failing_with_connection  # type: ignore[method-assign]
+
+    with mock_aws():
+        s3 = boto3.client("s3", region_name="us-east-1")
+        object_store = S3ObjectStore(client=s3, bucket=BUCKET)
+        object_store.ensure_bucket()
+        app.dependency_overrides[get_user_repository] = lambda: users
+        app.dependency_overrides[get_model_gateway] = lambda: gateway
+        app.dependency_overrides[get_analyze_service] = lambda: AnalyzeService(
+            model_gateway=gateway,
+            object_store=object_store,
+            repository=analyses,
+            timeout_seconds=5,
+        )
+        app.dependency_overrides[get_history_service] = lambda: HistoryService(
+            repository=analyses,
+            object_store=object_store,
+        )
+        with TestClient(app) as client:
+            headers = auth_headers(client, "operator")
+            before = client.get("/analyses", headers=headers).json()["items"]
+            response = post_image(client, headers, png_bytes())
+            after = client.get("/analyses", headers=headers).json()["items"]
+        app.dependency_overrides.clear()
+    get_settings.cache_clear()
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "STORE_UNAVAILABLE"
+    assert after == before

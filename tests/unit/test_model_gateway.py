@@ -160,7 +160,8 @@ def test_predict_with_stubbed_models_returns_stage_rows(monkeypatch):
     assert len(rows) == 1
     assert rows[0]["label"] == "MILCO"
     assert rows[0]["detector_score"] == pytest.approx(0.87)
-    assert rows[0]["confidence"] == pytest.approx(float(torch.softmax(torch.tensor([2.0, 0.1]), dim=0)[0]))
+    expected_conf = float(torch.softmax(torch.tensor([2.0, 0.1]), dim=0)[0])
+    assert rows[0]["confidence"] == pytest.approx(expected_conf)
     assert (rows[0]["x1"], rows[0]["y1"], rows[0]["x2"], rows[0]["y2"]) == (
         10.0,
         20.0,

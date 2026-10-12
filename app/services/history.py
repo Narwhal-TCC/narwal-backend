@@ -41,7 +41,8 @@ class HistoryService:
         class_filter: PrimaryClass | None = None,
     ) -> AnalysisListResponse:
         if class_filter is not None and class_filter not in VALID_PRIMARY_CLASSES:
-            raise ValidationError(f"class must be one of: {', '.join(sorted(VALID_PRIMARY_CLASSES))}")
+            allowed = ", ".join(sorted(VALID_PRIMARY_CLASSES))
+            raise ValidationError(f"class must be one of: {allowed}")
 
         records = self.repository.list_by_org(
             org_id,

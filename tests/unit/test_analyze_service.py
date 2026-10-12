@@ -1,12 +1,11 @@
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from io import BytesIO
 
 import numpy as np
 import pytest
 from PIL import Image
-
-from datetime import UTC, datetime
 
 from app.core.errors import (
     InferenceTimeoutError,

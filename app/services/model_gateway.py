@@ -56,8 +56,8 @@ class TwoStageTorchGateway:
 
     def predict(self, image_array: Any) -> list[dict]:
         torch = _import_torch()
-        from torchvision.transforms import functional as TF
         from torchvision import transforms as T
+        from torchvision.transforms import functional as TF
 
         from app.services.two_stage_models import (
             CLASS_NAMES,
