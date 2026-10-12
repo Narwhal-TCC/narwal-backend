@@ -10,7 +10,7 @@ from app.api.routes.analyses import router as analyses_router
 from app.api.routes.auth import router as auth_router
 from app.bootstrap.seed import run_seed
 from app.core.config import get_settings
-from app.core.errors import register_error_handlers
+from app.core.errors import StoreUnavailableError, register_error_handlers
 from app.repositories.s3_store import S3ObjectStore
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,8 @@ def bootstrap() -> None:
         logger.warning("Could not seed model artifacts to object storage", exc_info=True)
     try:
         run_seed()
+    except StoreUnavailableError:
+        logger.warning("metadata store unavailable", exc_info=True)
     except Exception:
         logger.warning("Could not seed organizations and users", exc_info=True)
     try:
