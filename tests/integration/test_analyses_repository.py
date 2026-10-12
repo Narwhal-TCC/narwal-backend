@@ -1,9 +1,10 @@
-import boto3
-import pytest
-from moto import mock_aws
+import sqlite3
+from pathlib import Path
 
+import pytest
+
+from app.core.errors import StoreUnavailableError
 from app.repositories.analyses import AnalysisRepository, new_analysis_id
-from app.repositories.users import ensure_table
 
 DETECTIONS = [
     {
@@ -17,21 +18,38 @@ DETECTIONS = [
     }
 ]
 
+DETECTIONS_088 = [
+    {
+        "x1": 1.0,
+        "y1": 2.0,
+        "x2": 3.0,
+        "y2": 4.0,
+        "confidence": 0.88,
+        "label": "MILCO",
+        "detector_score": 0.9,
+    }
+]
+
 
 @pytest.fixture
-def repository():
-    with mock_aws():
-        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = ensure_table(dynamodb, "analyses-test")
-        yield AnalysisRepository(table)
+def repository(tmp_path: Path):
+    db_path = tmp_path / "analyses.db"
+    return AnalysisRepository(str(db_path)), db_path
 
 
-def _put(repository, analysis_id, org_id, user_id="user-1", created_at="2026-09-13T12:00:00+00:00"):
+def _put(
+    repository,
+    analysis_id,
+    org_id,
+    user_id="user-1",
+    created_at="2026-09-13T12:00:00+00:00",
+    detections=None,
+):
     return repository.put_analysis(
         analysis_id=analysis_id,
         org_id=org_id,
         user_id=user_id,
-        detections=DETECTIONS,
+        detections=detections or DETECTIONS,
         image_s3_key=f"analyses/{org_id}/{analysis_id}/original.png",
         image_content_type="image/png",
         created_at=created_at,
@@ -40,9 +58,10 @@ def _put(repository, analysis_id, org_id, user_id="user-1", created_at="2026-09-
 
 
 def test_put_then_get_returns_same_detections(repository):
-    _put(repository, "an-1", "org-1")
+    repo, _ = repository
+    _put(repo, "an-1", "org-1")
 
-    record = repository.get_analysis("org-1", "an-1")
+    record = repo.get_analysis("org-1", "an-1")
 
     assert record["detections"] == DETECTIONS
     assert record["id"] == "an-1"
@@ -55,34 +74,60 @@ def test_put_then_get_returns_same_detections(repository):
     assert record["inference_ms"] == 42
 
 
-def test_list_returns_only_requested_org_newest_first(repository):
-    _put(repository, "an-1", "org-1")
-    _put(repository, "an-2", "org-1")
-    _put(repository, "an-3", "org-2")
+def test_confidence_088_round_trips_as_float(repository):
+    repo, _ = repository
+    _put(repo, "an-float", "org-1", detections=DETECTIONS_088)
 
-    records = repository.list_by_org("org-1")
+    record = repo.get_analysis("org-1", "an-float")
 
-    assert [record["id"] for record in records] == ["an-2", "an-1"]
+    confidence = record["detections"][0]["confidence"]
+    assert confidence == 0.88
+    assert isinstance(confidence, float)
+
+
+def test_list_returns_newest_created_at_first(repository):
+    repo, _ = repository
+    _put(repo, "an-older", "org-1", created_at="2026-09-10T12:00:00+00:00")
+    _put(repo, "an-newer", "org-1", created_at="2026-09-13T12:00:00+00:00")
+
+    records = repo.list_by_org("org-1")
+
+    assert [record["id"] for record in records] == ["an-newer", "an-older"]
+
+
+def test_list_returns_only_requested_org(repository):
+    repo, _ = repository
+    _put(repo, "an-1", "org-1")
+    _put(repo, "an-2", "org-1")
+    _put(repo, "an-3", "org-2")
+
+    records = repo.list_by_org("org-1")
+
+    assert len(records) == 2
+    assert all(record["org_id"] == "org-1" for record in records)
 
 
 def test_get_with_other_org_returns_none(repository):
-    _put(repository, "an-1", "org-1")
+    repo, _ = repository
+    _put(repo, "an-1", "org-1")
 
-    assert repository.get_analysis("org-2", "an-1") is None
+    assert repo.get_analysis("org-2", "an-1") is None
 
 
 def test_list_for_org_without_analyses_returns_empty(repository):
-    _put(repository, "an-1", "org-1")
+    repo, _ = repository
+    _put(repo, "an-1", "org-1")
 
-    assert repository.list_by_org("org-2") == []
+    assert repo.list_by_org("org-2") == []
 
 
 def test_list_applies_limit_and_offset(repository):
-    _put(repository, "an-1", "org-1")
-    _put(repository, "an-2", "org-1")
-    _put(repository, "an-3", "org-1")
+    repo, _ = repository
+    _put(repo, "an-1", "org-1", created_at="2026-09-11T12:00:00+00:00")
+    _put(repo, "an-2", "org-1", created_at="2026-09-12T12:00:00+00:00")
+    _put(repo, "an-3", "org-1", created_at="2026-09-13T12:00:00+00:00")
 
-    page = repository.list_by_org("org-1", limit=1, offset=1)
+    page = repo.list_by_org("org-1", limit=1, offset=1)
 
     assert [record["id"] for record in page] == ["an-2"]
 
@@ -96,7 +141,8 @@ def test_new_analysis_id_is_unique_and_time_sortable():
 
 
 def test_put_parity_fields_round_trip(repository):
-    repository.put_analysis(
+    repo, _ = repository
+    repo.put_analysis(
         analysis_id="an-parity",
         org_id="org-1",
         user_id="user-1",
@@ -113,7 +159,7 @@ def test_put_parity_fields_round_trip(repository):
         milco_detection_count=1,
     )
 
-    record = repository.get_analysis("org-1", "an-parity")
+    record = repo.get_analysis("org-1", "an-parity")
 
     assert record["review_status"] == "pending"
     assert record["primary_class"] == "MILCO"
@@ -123,17 +169,91 @@ def test_put_parity_fields_round_trip(repository):
     assert record["milco_detection_count"] == 1
 
 
-def test_update_review_status_updates_only_review_status(repository):
-    _put(repository, "an-1", "org-1")
+def test_update_review_status_confirmed_round_trips(repository):
+    repo, _ = repository
+    _put(repo, "an-1", "org-1")
 
-    updated = repository.update_review_status("org-1", "an-1", "confirmed")
+    updated = repo.update_review_status("org-1", "an-1", "confirmed")
 
     assert updated is not None
     assert updated["review_status"] == "confirmed"
     assert updated["status"] == "succeeded"
     assert updated["detections"] == DETECTIONS
-    assert repository.get_analysis("org-1", "an-1")["review_status"] == "confirmed"
+    assert repo.get_analysis("org-1", "an-1")["review_status"] == "confirmed"
 
 
 def test_update_review_status_missing_returns_none(repository):
-    assert repository.update_review_status("org-1", "missing", "confirmed") is None
+    repo, _ = repository
+    assert repo.update_review_status("org-1", "missing", "confirmed") is None
+
+
+def test_image_s3_key_persisted_without_blob_column(repository):
+    repo, db_path = repository
+    _put(repo, "an-1", "org-1")
+
+    conn = sqlite3.connect(db_path)
+    columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(analyses)").fetchall()
+    }
+    conn.close()
+
+    record = repo.get_analysis("org-1", "an-1")
+    assert record["image_s3_key"] == "analyses/org-1/an-1/original.png"
+    assert "image_blob" not in columns
+
+
+def test_reopen_same_path_returns_stored_analysis(repository):
+    repo, db_path = repository
+    _put(repo, "an-persist", "org-1", created_at="2026-09-14T10:00:00+00:00")
+
+    reopened = AnalysisRepository(str(db_path))
+    record = reopened.get_analysis("org-1", "an-persist")
+
+    assert record is not None
+    assert record["id"] == "an-persist"
+    assert record["created_at"] == "2026-09-14T10:00:00+00:00"
+
+
+class _ConnectionProxy:
+    def __init__(self, inner: sqlite3.Connection) -> None:
+        self._inner = inner
+
+    def execute(self, sql, params=(), /, **kwargs):
+        if "INSERT INTO analyses" in str(sql):
+            raise sqlite3.OperationalError("forced insert failure")
+        return self._inner.execute(sql, params, **kwargs)
+
+    def commit(self):
+        return self._inner.commit()
+
+    def rollback(self):
+        return self._inner.rollback()
+
+    def close(self):
+        return self._inner.close()
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def test_failed_insert_raises_store_unavailable_and_leaves_list_unchanged(repository):
+    repo, _ = repository
+    _put(repo, "an-1", "org-1")
+    real_with_connection = repo._with_connection
+
+    def failing_with_connection():
+        return _ConnectionProxy(real_with_connection())
+
+    repo._with_connection = failing_with_connection  # type: ignore[method-assign]
+    with pytest.raises(StoreUnavailableError):
+        repo.put_analysis(
+            analysis_id="an-2",
+            org_id="org-1",
+            user_id="user-1",
+            detections=DETECTIONS,
+            image_s3_key="analyses/org-1/an-2/original.png",
+            image_content_type="image/png",
+            created_at="2026-09-14T11:00:00+00:00",
+        )
+
+    assert [row["id"] for row in repo.list_by_org("org-1")] == ["an-1"]

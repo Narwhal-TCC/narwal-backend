@@ -1,11 +1,12 @@
 import json
-from decimal import Decimal
-from typing import Any
+import sqlite3
+from pathlib import Path
 
-from boto3.dynamodb.conditions import Key
 from ulid import ULID
 
-from app.repositories.users import ensure_table
+from app.core.config import get_settings
+from app.core.errors import StoreUnavailableError
+from app.repositories.metadata_db import connect
 
 DEFAULT_LIST_LIMIT = 50
 
@@ -14,46 +15,39 @@ def new_analysis_id() -> str:
     return str(ULID())
 
 
-def _encode(value: Any) -> Any:
-    """DynamoDB rejects floats, so route payloads through Decimal."""
-    return json.loads(json.dumps(value), parse_float=Decimal)
-
-
-def _decode(value: Any) -> Any:
-    if isinstance(value, list):
-        return [_decode(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _decode(item) for key, item in value.items()}
-    if isinstance(value, Decimal):
-        return float(value)
-    return value
-
-
-def _to_record(item: dict) -> dict:
-    inference_ms = item.get("inference_ms")
-    record = {
-        "id": item["analysis_id"],
-        "org_id": item["org_id"],
-        "user_id": item["user_id"],
-        "status": item["status"],
-        "review_status": item.get("review_status", "pending"),
-        "primary_class": item.get("primary_class"),
-        "campaign_name": item.get("campaign_name"),
-        "coordinates": item.get("coordinates"),
-        "collected_at": item.get("collected_at"),
-        "milco_detection_count": int(item.get("milco_detection_count", 0)),
-        "detections": _decode(item.get("detections", [])),
-        "image_s3_key": item["image_s3_key"],
-        "image_content_type": item["image_content_type"],
-        "created_at": item["created_at"],
+def _to_record(row: sqlite3.Row) -> dict:
+    detections = json.loads(row["detections"])
+    inference_ms = row["inference_ms"]
+    return {
+        "id": row["analysis_id"],
+        "org_id": row["org_id"],
+        "user_id": row["user_id"],
+        "status": row["status"],
+        "review_status": row["review_status"],
+        "primary_class": row["primary_class"],
+        "campaign_name": row["campaign_name"],
+        "coordinates": row["coordinates"],
+        "collected_at": row["collected_at"],
+        "milco_detection_count": int(row["milco_detection_count"]),
+        "detections": detections,
+        "image_s3_key": row["image_s3_key"],
+        "image_content_type": row["image_content_type"],
+        "created_at": row["created_at"],
         "inference_ms": int(inference_ms) if inference_ms is not None else None,
     }
-    return record
 
 
 class AnalysisRepository:
-    def __init__(self, table: Any | None = None) -> None:
-        self.table = table or ensure_table()
+    def __init__(self, path: str | None = None) -> None:
+        self._path = path
+
+    def _db_path(self) -> Path:
+        if self._path is not None:
+            return Path(self._path)
+        return Path(get_settings().sqlite_path)
+
+    def _with_connection(self):
+        return connect(self._db_path())
 
     def put_analysis(
         self,
@@ -73,31 +67,44 @@ class AnalysisRepository:
         collected_at: str | None = None,
         milco_detection_count: int = 0,
     ) -> dict:
-        item = {
-            "PK": f"ORG#{org_id}",
-            "SK": f"ANALYSIS#{analysis_id}",
-            "analysis_id": analysis_id,
-            "org_id": org_id,
-            "user_id": user_id,
-            "status": status,
-            "review_status": review_status,
-            "milco_detection_count": milco_detection_count,
-            "detections": _encode(detections),
-            "image_s3_key": image_s3_key,
-            "image_content_type": image_content_type,
-            "created_at": created_at,
-            "inference_ms": inference_ms,
-        }
-        if primary_class is not None:
-            item["primary_class"] = primary_class
-        if campaign_name is not None:
-            item["campaign_name"] = campaign_name
-        if coordinates is not None:
-            item["coordinates"] = coordinates
-        if collected_at is not None:
-            item["collected_at"] = collected_at
-        self.table.put_item(Item=item)
-        return _to_record(item)
+        conn = self._with_connection()
+        try:
+            conn.execute(
+                """
+                INSERT INTO analyses (
+                  analysis_id, org_id, user_id, status, review_status,
+                  primary_class, campaign_name, coordinates, collected_at,
+                  milco_detection_count, detections, image_s3_key,
+                  image_content_type, created_at, inference_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    analysis_id,
+                    org_id,
+                    user_id,
+                    status,
+                    review_status,
+                    primary_class,
+                    campaign_name,
+                    coordinates,
+                    collected_at,
+                    milco_detection_count,
+                    json.dumps(detections),
+                    image_s3_key,
+                    image_content_type,
+                    created_at,
+                    inference_ms,
+                ),
+            )
+            conn.commit()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            conn.rollback()
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
+        row = self._fetch_row(org_id, analysis_id)
+        assert row is not None
+        return _to_record(row)
 
     def update_review_status(
         self,
@@ -105,28 +112,49 @@ class AnalysisRepository:
         analysis_id: str,
         review_status: str,
     ) -> dict | None:
-        from botocore.exceptions import ClientError
-
+        conn = self._with_connection()
+        rowcount = 0
         try:
-            response = self.table.update_item(
-                Key={"PK": f"ORG#{org_id}", "SK": f"ANALYSIS#{analysis_id}"},
-                UpdateExpression="SET review_status = :review_status",
-                ConditionExpression="attribute_exists(PK)",
-                ExpressionAttributeValues={":review_status": review_status},
-                ReturnValues="ALL_NEW",
+            cursor = conn.execute(
+                """
+                UPDATE analyses SET review_status = ?
+                WHERE org_id = ? AND analysis_id = ?
+                """,
+                (review_status, org_id, analysis_id),
             )
-        except ClientError as exc:
-            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
-                return None
-            raise
-        return _to_record(response["Attributes"])
+            rowcount = cursor.rowcount
+            conn.commit()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            conn.rollback()
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
+        if rowcount == 0:
+            return None
+        row = self._fetch_row(org_id, analysis_id)
+        return _to_record(row) if row else None
+
+    def _fetch_row(self, org_id: str, analysis_id: str) -> sqlite3.Row | None:
+        conn = self._with_connection()
+        try:
+            return conn.execute(
+                """
+                SELECT analysis_id, org_id, user_id, status, review_status,
+                       primary_class, campaign_name, coordinates, collected_at,
+                       milco_detection_count, detections, image_s3_key,
+                       image_content_type, created_at, inference_ms
+                FROM analyses WHERE org_id = ? AND analysis_id = ?
+                """,
+                (org_id, analysis_id),
+            ).fetchone()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
 
     def get_analysis(self, org_id: str, analysis_id: str) -> dict | None:
-        response = self.table.get_item(
-            Key={"PK": f"ORG#{org_id}", "SK": f"ANALYSIS#{analysis_id}"}
-        )
-        item = response.get("Item")
-        return _to_record(item) if item else None
+        row = self._fetch_row(org_id, analysis_id)
+        return _to_record(row) if row else None
 
     def list_by_org(
         self,
@@ -134,11 +162,23 @@ class AnalysisRepository:
         limit: int = DEFAULT_LIST_LIMIT,
         offset: int = 0,
     ) -> list[dict]:
-        response = self.table.query(
-            KeyConditionExpression=Key("PK").eq(f"ORG#{org_id}")
-            & Key("SK").begins_with("ANALYSIS#"),
-            ScanIndexForward=False,
-            Limit=offset + limit,
-        )
-        items = response.get("Items", [])[offset : offset + limit]
-        return [_to_record(item) for item in items]
+        conn = self._with_connection()
+        try:
+            rows = conn.execute(
+                """
+                SELECT analysis_id, org_id, user_id, status, review_status,
+                       primary_class, campaign_name, coordinates, collected_at,
+                       milco_detection_count, detections, image_s3_key,
+                       image_content_type, created_at, inference_ms
+                FROM analyses
+                WHERE org_id = ?
+                ORDER BY created_at DESC, analysis_id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (org_id, limit, offset),
+            ).fetchall()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
+        return [_to_record(row) for row in rows]
