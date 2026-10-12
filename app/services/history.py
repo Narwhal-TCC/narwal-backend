@@ -8,10 +8,12 @@ from app.schemas.analysis import (
     AnalysisListResponse,
     AnalysisResult,
     AnalysisSummary,
+    Detection,
     OrgStatsResponse,
     PrimaryClass,
     ReviewStatus,
 )
+from app.services.detection_adapter import suppress_overlapping
 
 VALID_PRIMARY_CLASSES = frozenset({"MILCO", "NOMBO"})
 VALID_REVIEW_STATUSES = frozenset({"pending", "confirmed", "false_positive"})
@@ -141,6 +143,14 @@ class HistoryService:
             return None
         return datetime.fromisoformat(value)
 
+    @staticmethod
+    def _visible_detections(record: dict) -> list[Detection]:
+        raw = record.get("detections") or []
+        parsed = [
+            item if isinstance(item, Detection) else Detection.model_validate(item) for item in raw
+        ]
+        return suppress_overlapping(parsed)
+
     def _to_summary(self, record: dict) -> AnalysisSummary:
         return AnalysisSummary(
             id=record["id"],
@@ -155,7 +165,7 @@ class HistoryService:
             milco_detection_count=record.get("milco_detection_count", 0),
             created_at=record["created_at"],
             inference_ms=record.get("inference_ms"),
-            detection_count=len(record["detections"]),
+            detection_count=len(self._visible_detections(record)),
         )
 
     def _to_result(self, record: dict) -> AnalysisResult:
@@ -170,7 +180,7 @@ class HistoryService:
             coordinates=record.get("coordinates"),
             collected_at=self._parse_collected_at(record.get("collected_at")),
             milco_detection_count=record.get("milco_detection_count", 0),
-            detections=record["detections"],
+            detections=self._visible_detections(record),
             image_content_type=record["image_content_type"],
             image_s3_key=record["image_s3_key"],
             image_url=self.object_store.presign_get(

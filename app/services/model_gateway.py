@@ -11,6 +11,7 @@ from PIL import Image
 from app.core.config import get_settings
 from app.core.errors import ModelUnavailableError
 from app.repositories.s3_store import S3ObjectStore
+from app.services.detection_adapter import kept_box_indices
 
 DEFAULT_FAKE_STAGE_OUTPUT: tuple[dict, ...] = (
     {
@@ -100,11 +101,22 @@ class TwoStageTorchGateway:
             scores = pred["scores"].detach().cpu().numpy()
 
             score_threshold = get_settings().detector_score_threshold
-            results: list[dict] = []
+            candidates: list[tuple[float, float, float, float, float]] = []
             for box, score in zip(boxes, scores, strict=False):
                 if float(score) < score_threshold:
                     continue
                 xmin, ymin, xmax, ymax = (float(v) for v in box)
+                candidates.append((xmin, ymin, xmax, ymax, float(score)))
+
+            # Detector NMS is per class, so one contact can arrive as two boxes.
+            # Keep the stronger proposal before the fusion classifier assigns a label.
+            keep = kept_box_indices(
+                [(xmin, ymin, xmax, ymax) for xmin, ymin, xmax, ymax, _score in candidates],
+                [score for _xmin, _ymin, _xmax, _ymax, score in candidates],
+            )
+            results: list[dict] = []
+            for index in keep:
+                xmin, ymin, xmax, ymax, score = candidates[index]
                 bw, bh = xmax - xmin, ymax - ymin
                 xmin_m = max(0.0, xmin - bw * CROP_MARGIN)
                 ymin_m = max(0.0, ymin - bh * CROP_MARGIN)

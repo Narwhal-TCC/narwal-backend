@@ -203,6 +203,45 @@ def test_predict_skips_boxes_below_training_detector_threshold(monkeypatch):
     assert classify_calls == 1
 
 
+def test_predict_keeps_one_box_when_proposals_overlap(monkeypatch):
+    torch = pytest.importorskip("torch")
+    classify_calls = 0
+
+    class OverlappingDetector:
+        def eval(self):
+            return self
+
+        def __call__(self, images):
+            boxes = torch.tensor(
+                [
+                    [10.0, 10.0, 40.0, 40.0],
+                    [12.0, 12.0, 42.0, 42.0],
+                    [70.0, 10.0, 90.0, 40.0],
+                ]
+            )
+            scores = torch.tensor([0.91, 0.62, 0.8])
+            return [{"boxes": boxes, "scores": scores}]
+
+    class CountingClassifier:
+        def eval(self):
+            return self
+
+        def __call__(self, batch):
+            nonlocal classify_calls
+            classify_calls += 1
+            return torch.tensor([[0.2, 1.5]])
+
+    gateway = TwoStageTorchGateway(store=_MissingObjectStore())
+    gateway._detector = OverlappingDetector()
+    gateway._classifier = CountingClassifier()
+    gateway._device = torch.device("cpu")
+
+    rows = gateway.predict(np.zeros((100, 120, 3), dtype=np.uint8))
+
+    assert classify_calls == 2
+    assert [row["detector_score"] for row in rows] == pytest.approx([0.91, 0.8])
+
+
 def test_predict_empty_boxes_returns_empty_list(monkeypatch):
     torch = pytest.importorskip("torch")
 

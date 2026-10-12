@@ -124,6 +124,38 @@ def test_get_returns_detections_and_presigned_image_url():
     assert result.detections[0].confidence == 0.75
 
 
+def test_get_and_list_collapse_overlapping_stored_detections():
+    stored = record("an-overlap", "org-1")
+    stored["detections"] = [
+        {
+            "x1": 148.92,
+            "y1": 282.54,
+            "x2": 166.50,
+            "y2": 308.28,
+            "confidence": 0.833,
+            "label": "NOMBO",
+            "detector_score": 0.741,
+        },
+        {
+            "x1": 148.98,
+            "y1": 281.78,
+            "x2": 166.59,
+            "y2": 308.59,
+            "confidence": 0.727,
+            "label": "NOMBO",
+            "detector_score": 0.521,
+        },
+    ]
+    service = build_service([stored])
+
+    result = service.get_analysis("org-1", "an-overlap")
+    page = service.list_analyses("org-1")
+
+    assert len(result.detections) == 1
+    assert result.detections[0].detector_score == pytest.approx(0.741)
+    assert page.items[0].detection_count == 1
+
+
 def test_get_for_another_org_analysis_raises_not_found():
     service = build_service([record("an-1", "org-2")])
 

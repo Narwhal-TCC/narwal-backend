@@ -89,6 +89,60 @@ def test_incomplete_stage_rows_are_skipped():
     assert to_detections(raw, 100, 100) == []
 
 
+def test_overlapping_boxes_collapse_to_the_stronger_proposal():
+    raw = [
+        {
+            "x1": 148.9163055419922,
+            "y1": 282.54498291015625,
+            "x2": 166.50328063964844,
+            "y2": 308.2796630859375,
+            "detector_score": 0.7409245371818542,
+            "label": "NOMBO",
+            "confidence": 0.8330937623977661,
+        },
+        {
+            "x1": 148.9770965576172,
+            "y1": 281.77630615234375,
+            "x2": 166.58802795410156,
+            "y2": 308.5933532714844,
+            "detector_score": 0.520520806312561,
+            "label": "NOMBO",
+            "confidence": 0.7268542051315308,
+        },
+    ]
+
+    detections = to_detections(raw, image_width=640, image_height=480)
+
+    assert len(detections) == 1
+    assert detections[0].detector_score == pytest.approx(0.7409245371818542)
+    assert detections[0].confidence == pytest.approx(0.8330937623977661)
+
+
+def test_separated_boxes_are_both_kept():
+    raw = [
+        {
+            "x1": 67.9,
+            "y1": 365.6,
+            "x2": 83.9,
+            "y2": 375.3,
+            "detector_score": 0.577,
+            "label": "MILCO",
+            "confidence": 0.971,
+        },
+        {
+            "x1": 261.9,
+            "y1": 106.5,
+            "x2": 275.5,
+            "y2": 120.4,
+            "detector_score": 0.532,
+            "label": "MILCO",
+            "confidence": 0.910,
+        },
+    ]
+
+    assert len(to_detections(raw, image_width=640, image_height=480)) == 2
+
+
 def test_scores_clamped_to_unit_interval():
     raw = [
         {
