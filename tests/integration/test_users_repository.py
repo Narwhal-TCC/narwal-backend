@@ -1,14 +1,11 @@
-import boto3
-from moto import mock_aws
+from pathlib import Path
 
-from app.repositories.users import UserRepository, ensure_table
+from app.repositories.users import UserRepository
 
 
-@mock_aws
-def test_create_org_and_user_then_fetch_by_username():
-    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    table = ensure_table(dynamodb, "users-test")
-    repository = UserRepository(table)
+def test_create_org_and_user_then_fetch_by_username(tmp_path: Path):
+    db_path = tmp_path / "users.db"
+    repository = UserRepository(str(db_path))
 
     repository.put_org(org_id="org-1", name="Sonar Team")
     repository.put_user(
@@ -20,14 +17,10 @@ def test_create_org_and_user_then_fetch_by_username():
     )
 
     assert repository.get_org("org-1") == {
-        "PK": "ORG#org-1",
-        "SK": "META",
         "org_id": "org-1",
         "name": "Sonar Team",
     }
     assert repository.get_by_username("operator") == {
-        "PK": "ORG#org-1",
-        "SK": "USER#user-1",
         "user_id": "user-1",
         "org_id": "org-1",
         "username": "operator",
@@ -36,11 +29,9 @@ def test_create_org_and_user_then_fetch_by_username():
     }
 
 
-@mock_aws
-def test_username_lookup_contains_user_and_org_ids():
-    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-    table = ensure_table(dynamodb, "users-test")
-    repository = UserRepository(table)
+def test_get_user_returns_row_for_org_and_user_id(tmp_path: Path):
+    db_path = tmp_path / "users.db"
+    repository = UserRepository(str(db_path))
     repository.put_user(
         user_id="admin-1",
         org_id="platform",
@@ -49,12 +40,10 @@ def test_username_lookup_contains_user_and_org_ids():
         role="platform_admin",
     )
 
-    lookup = repository.get_username_lookup("admin")
-
-    assert lookup == {
-        "PK": "USERNAME#admin",
-        "SK": "USER",
-        "username": "admin",
+    assert repository.get_user("platform", "admin-1") == {
         "user_id": "admin-1",
         "org_id": "platform",
+        "username": "admin",
+        "password_hash": "hashed-password",
+        "role": "platform_admin",
     }

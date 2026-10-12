@@ -1,49 +1,53 @@
-from typing import Any
+import sqlite3
+from pathlib import Path
 
-from botocore.exceptions import ClientError
-
-from app.core.aws import dynamodb_resource
 from app.core.config import get_settings
+from app.core.errors import StoreUnavailableError
 from app.core.security import Role
-
-
-def ensure_table(dynamodb: Any | None = None, table_name: str | None = None):
-    resource = dynamodb or dynamodb_resource()
-    name = table_name or get_settings().ddb_table
-    table = resource.Table(name)
-    try:
-        table.load()
-    except ClientError as exc:
-        if exc.response["Error"]["Code"] != "ResourceNotFoundException":
-            raise
-        table = resource.create_table(
-            TableName=name,
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.wait_until_exists()
-    return table
+from app.repositories.metadata_db import connect
 
 
 class UserRepository:
-    def __init__(self, table: Any | None = None) -> None:
-        self.table = table or ensure_table()
+    def __init__(self, path: str | None = None) -> None:
+        self._path = path
+
+    def _db_path(self) -> Path:
+        if self._path is not None:
+            return Path(self._path)
+        return Path(get_settings().sqlite_path)
+
+    def _with_connection(self):
+        return connect(self._db_path())
 
     def put_org(self, org_id: str, name: str) -> None:
-        self.table.put_item(
-            Item={"PK": f"ORG#{org_id}", "SK": "META", "org_id": org_id, "name": name}
-        )
+        conn = self._with_connection()
+        try:
+            conn.execute(
+                "INSERT INTO orgs (org_id, name) VALUES (?, ?) "
+                "ON CONFLICT(org_id) DO UPDATE SET name = excluded.name",
+                (org_id, name),
+            )
+            conn.commit()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            conn.rollback()
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
 
     def get_org(self, org_id: str) -> dict | None:
-        response = self.table.get_item(Key={"PK": f"ORG#{org_id}", "SK": "META"})
-        return response.get("Item")
+        conn = self._with_connection()
+        try:
+            row = conn.execute(
+                "SELECT org_id, name FROM orgs WHERE org_id = ?",
+                (org_id,),
+            ).fetchone()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
+        if row is None:
+            return None
+        return {"org_id": row["org_id"], "name": row["name"]}
 
     def put_user(
         self,
@@ -53,39 +57,70 @@ class UserRepository:
         password_hash: str,
         role: Role = "member",
     ) -> None:
-        self.table.put_item(
-            Item={
-                "PK": f"ORG#{org_id}",
-                "SK": f"USER#{user_id}",
-                "user_id": user_id,
-                "org_id": org_id,
-                "username": username,
-                "password_hash": password_hash,
-                "role": role,
-            }
-        )
-        self.table.put_item(
-            Item={
-                "PK": f"USERNAME#{username}",
-                "SK": "USER",
-                "username": username,
-                "user_id": user_id,
-                "org_id": org_id,
-            }
-        )
+        conn = self._with_connection()
+        try:
+            conn.execute(
+                """
+                INSERT INTO users (user_id, org_id, username, password_hash, role)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(org_id, user_id) DO UPDATE SET
+                  username = excluded.username,
+                  password_hash = excluded.password_hash,
+                  role = excluded.role
+                """,
+                (user_id, org_id, username, password_hash, role),
+            )
+            conn.commit()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            conn.rollback()
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
 
     def get_user(self, org_id: str, user_id: str) -> dict | None:
-        response = self.table.get_item(
-            Key={"PK": f"ORG#{org_id}", "SK": f"USER#{user_id}"}
-        )
-        return response.get("Item")
-
-    def get_username_lookup(self, username: str) -> dict | None:
-        response = self.table.get_item(Key={"PK": f"USERNAME#{username}", "SK": "USER"})
-        return response.get("Item")
+        conn = self._with_connection()
+        try:
+            row = conn.execute(
+                """
+                SELECT user_id, org_id, username, password_hash, role
+                FROM users WHERE org_id = ? AND user_id = ?
+                """,
+                (org_id, user_id),
+            ).fetchone()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
+        if row is None:
+            return None
+        return {
+            "user_id": row["user_id"],
+            "org_id": row["org_id"],
+            "username": row["username"],
+            "password_hash": row["password_hash"],
+            "role": row["role"],
+        }
 
     def get_by_username(self, username: str) -> dict | None:
-        lookup = self.get_username_lookup(username)
-        if lookup is None:
+        conn = self._with_connection()
+        try:
+            row = conn.execute(
+                """
+                SELECT user_id, org_id, username, password_hash, role
+                FROM users WHERE username = ?
+                """,
+                (username,),
+            ).fetchone()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
+        if row is None:
             return None
-        return self.get_user(lookup["org_id"], lookup["user_id"])
+        return {
+            "user_id": row["user_id"],
+            "org_id": row["org_id"],
+            "username": row["username"],
+            "password_hash": row["password_hash"],
+            "role": row["role"],
+        }
