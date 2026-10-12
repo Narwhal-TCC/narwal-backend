@@ -23,3 +23,11 @@ def test_readme_documents_sqlite_metadata_file():
     assert "./db/narwal.db" in readme
     assert "DynamoDB Local" not in readme
     assert "DYNAMODB_ENDPOINT_URL" not in readme
+
+
+def test_env_example_documents_sqlite_path():
+    env_example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+
+    assert "SQLITE_PATH=db/narwal.db" in env_example
+    assert "DYNAMODB_ENDPOINT_URL" not in env_example
+    assert "DDB_TABLE" not in env_example
