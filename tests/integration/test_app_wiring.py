@@ -1,5 +1,6 @@
 from io import BytesIO
 
+import boto3
 import pytest
 from fastapi.testclient import TestClient
 from moto import mock_aws
@@ -12,6 +13,7 @@ from app.api.deps import (
 )
 from app.core.config import get_settings
 from app.main import app
+from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
 from app.services.model_gateway import FakeModelGateway
 
@@ -29,9 +31,9 @@ def _clear_dependency_caches() -> None:
 
 
 @pytest.fixture
-def wired_client(monkeypatch):
+def wired_client(monkeypatch, tmp_path):
     monkeypatch.setenv("JWT_SECRET", "wiring-test-secret-at-least-32-bytes")
-    monkeypatch.setenv("DDB_TABLE", "wiring-test")
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "wiring.db"))
     monkeypatch.setenv("S3_BUCKET", "wiring-test")
     monkeypatch.setenv("PLATFORM_ADMIN_USERNAME", "wiring-admin")
     monkeypatch.setenv("PLATFORM_ADMIN_PASSWORD", "wiring-admin-password")
@@ -41,7 +43,11 @@ def wired_client(monkeypatch):
     get_settings.cache_clear()
     _clear_dependency_caches()
     with mock_aws():
+        s3 = boto3.client("s3", region_name="us-east-1")
+        store = S3ObjectStore(client=s3, bucket="wiring-test")
+        store.ensure_bucket()
         app.dependency_overrides[get_model_gateway] = lambda: FakeModelGateway()
+        app.dependency_overrides[get_object_store] = lambda: store
         with TestClient(app) as client:
             yield client
         app.dependency_overrides.clear()
@@ -55,7 +61,8 @@ def test_lifespan_seeds_platform_admin_and_creates_bucket(wired_client):
     assert seeded is not None
     assert seeded["org_id"] == "wiring-org"
     assert seeded["role"] == "platform_admin"
-    buckets = [bucket["Name"] for bucket in get_object_store().client.list_buckets()["Buckets"]]
+    s3 = boto3.client("s3", region_name="us-east-1")
+    buckets = [bucket["Name"] for bucket in s3.list_buckets()["Buckets"]]
     assert "wiring-test" in buckets
 
 

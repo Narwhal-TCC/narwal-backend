@@ -15,8 +15,8 @@ def local_env(monkeypatch):
     monkeypatch.setenv("S3_BUCKET", BUCKET)
     monkeypatch.setenv("DETECTOR_S3_URI", f"s3://{BUCKET}/{DETECTOR_KEY}")
     monkeypatch.setenv("CLASSIFIER_S3_URI", f"s3://{BUCKET}/{CLASSIFIER_KEY}")
-    monkeypatch.delenv("S3_ENDPOINT_URL", raising=False)
-    monkeypatch.delenv("S3_PUBLIC_ENDPOINT", raising=False)
+    monkeypatch.setenv("S3_ENDPOINT_URL", "")
+    monkeypatch.setenv("S3_PUBLIC_ENDPOINT", "")
     get_settings.cache_clear()
     yield monkeypatch
     get_settings.cache_clear()
@@ -24,8 +24,11 @@ def local_env(monkeypatch):
 
 @pytest.fixture
 def store(local_env):
+    import boto3
+
     with mock_aws():
-        object_store = S3ObjectStore()
+        s3 = boto3.client("s3", region_name="us-east-1")
+        object_store = S3ObjectStore(client=s3, bucket=BUCKET)
         object_store.ensure_bucket()
         yield object_store
 
@@ -122,10 +125,16 @@ def test_seed_model_if_missing_noops_when_local_file_absent(store, tmp_path):
 
 
 def test_presign_get_signs_against_public_endpoint_when_set(local_env):
+    import boto3
+
     local_env.setenv("S3_PUBLIC_ENDPOINT", "http://localhost:9000")
     get_settings.cache_clear()
+    from app.core.aws import s3_client
+
     with mock_aws():
-        store = S3ObjectStore()
+        s3 = boto3.client("s3", region_name="us-east-1")
+        presign_client = s3_client(endpoint_url="http://localhost:9000")
+        store = S3ObjectStore(client=s3, presign_client=presign_client, bucket=BUCKET)
         store.ensure_bucket()
         key = store.put_analysis_image("org-1", "an-1", "png", b"bytes", "image/png")
 
