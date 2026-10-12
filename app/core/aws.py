@@ -31,15 +31,3 @@ def s3_client(endpoint_url: str | None = None):
             config_kwargs["s3"] = {"addressing_style": "path"}
         kwargs["config"] = Config(**config_kwargs)
     return boto3.client(**kwargs)
-
-
-def dynamodb_resource():
-    settings = get_settings()
-    kwargs: dict = {
-        "service_name": "dynamodb",
-        "region_name": settings.aws_region,
-        **_credential_kwargs(settings),
-    }
-    if settings.dynamodb_endpoint_url:
-        kwargs["endpoint_url"] = settings.dynamodb_endpoint_url
-    return boto3.resource(**kwargs)
