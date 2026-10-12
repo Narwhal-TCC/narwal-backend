@@ -9,6 +9,7 @@ from app.core.errors import (
     InvalidImageError,
     ModelUnavailableError,
     StorageError,
+    StoreUnavailableError,
     UnauthorizedError,
     register_error_handlers,
 )
@@ -43,6 +44,15 @@ def test_model_unavailable_returns_503_with_code():
     assert body["message"] == "Model not loaded"
 
 
+def test_store_unavailable_returns_503_with_code_and_default_message():
+    client = _client_for(StoreUnavailableError())
+    response = client.get("/raise")
+    assert response.status_code == 503
+    body = response.json()
+    assert body["code"] == "STORE_UNAVAILABLE"
+    assert body["message"] == "Metadata store is unavailable"
+
+
 def test_all_error_codes_have_expected_status():
     cases = [
         (InvalidCredentialsError(), 401, "INVALID_CREDENTIALS"),
@@ -51,6 +61,7 @@ def test_all_error_codes_have_expected_status():
         (ModelUnavailableError(), 503, "MODEL_UNAVAILABLE"),
         (InferenceTimeoutError(), 504, "INFERENCE_TIMEOUT"),
         (StorageError(), 503, "STORAGE_ERROR"),
+        (StoreUnavailableError(), 503, "STORE_UNAVAILABLE"),
         (AnalysisNotFoundError(), 404, "ANALYSIS_NOT_FOUND"),
     ]
     for error, status, code in cases:

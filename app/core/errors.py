@@ -54,6 +54,12 @@ class StorageError(AppError):
     default_message = "Object storage operation failed"
 
 
+class StoreUnavailableError(AppError):
+    code = "STORE_UNAVAILABLE"
+    status_code = 503
+    default_message = "Metadata store is unavailable"
+
+
 class AnalysisNotFoundError(AppError):
     code = "ANALYSIS_NOT_FOUND"
     status_code = 404
