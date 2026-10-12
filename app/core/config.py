@@ -54,7 +54,9 @@ class Settings(BaseSettings):
         ge=0.0,
         le=1.0,
         alias="DETECTOR_SCORE_THRESHOLD",
-        description="Minimum RetinaNet score; must match training eval (notebook score_thresh=0.5).",
+        description=(
+            "Minimum RetinaNet score; must match training eval (notebook score_thresh=0.5)."
+        ),
     )
 
     # Analysis list / metadata bounds
