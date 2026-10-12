@@ -1,6 +1,6 @@
 # Narwal Backend
 
-Sonar mine analysis API — FastAPI + S3/MinIO + DynamoDB.
+Sonar mine analysis API — FastAPI + S3/MinIO + SQLite metadata.
 
 Authenticated org members upload a sonar image, get detection boxes with confidence back
 synchronously, and can list or reopen their organization's past analyses.
@@ -17,19 +17,19 @@ docker compose up --build
 | API | http://localhost:8080 | OpenAPI at `/docs`, liveness at `/health` |
 | MinIO API | http://localhost:9000 | bucket `narwal`, created by `minio-init` and on startup |
 | MinIO console | http://localhost:9001 | `minioadmin` / `minioadmin` |
-| DynamoDB Local | http://localhost:8000 | `-inMemory`, so data resets when the container is recreated |
+| Metadata | `./db/narwal.db` on the host | Mounted read-write into the app container; users and analyses survive restarts |
 
 Startup runs a best-effort bootstrap: ensure the bucket, upload the local RetinaNet and fusion
 `.pt` artifacts from `DETECTOR_LOCAL_PATH` / `CLASSIFIER_LOCAL_PATH` when missing in object storage,
-seed the platform admin from `PLATFORM_ADMIN_*` and a demo member from `SEED_DEMO_*`, and preload
-both models. Each step logs a warning and the API still serves if a backing store is not ready yet.
-DynamoDB Local runs in memory, so re-seeding happens on every `docker compose up`.
+seed the platform admin from `PLATFORM_ADMIN_*` and a demo member from `SEED_DEMO_*` when absent in
+the database file, and preload both models. Each step logs a warning and the API still serves if a
+backing store is not ready yet.
 
 ## Environment variables
 
 All variables and their local defaults live in [`.env.example`](.env.example). On AWS, leave
-`S3_ENDPOINT_URL`, `S3_PUBLIC_ENDPOINT`, and `DYNAMODB_ENDPOINT_URL` unset, set
-`S3_FORCE_PATH_STYLE=false`, and prefer an instance profile over static keys. Never commit a real
+`S3_ENDPOINT_URL` and `S3_PUBLIC_ENDPOINT` unset, set `S3_FORCE_PATH_STYLE=false`, and prefer an
+instance profile over static keys. Never commit a real
 `JWT_SECRET` or admin password.
 
 `S3_PUBLIC_ENDPOINT` matters locally: presigned image URLs are signed against the host in the URL,
