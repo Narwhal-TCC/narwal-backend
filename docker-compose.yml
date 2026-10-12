@@ -1,5 +1,5 @@
-# Local dev stack: MinIO (S3 API), DynamoDB Local, API app.
-# Ports: MinIO API 9000, console 9001; DynamoDB Local 8000; app 8080.
+# Local dev stack: MinIO (S3 API) and API app.
+# Ports: MinIO API 9000, console 9001; app 8080.
 
 services:
   # Official minio/minio Docker Hub images are no longer published (source-only).
@@ -37,13 +37,6 @@ services:
       aws --endpoint-url http://minio:9000 s3 mb s3://narwal 2>/dev/null || true
       "
 
-  dynamodb:
-    image: amazon/dynamodb-local:latest
-    command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
-    ports:
-      - "8000:8000"
-    working_dir: /home/dynamodblocal
-
   app:
     build: .
     ports:
@@ -56,8 +49,7 @@ services:
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_FORCE_PATH_STYLE: "true"
       S3_BUCKET: narwal
-      DYNAMODB_ENDPOINT_URL: http://dynamodb:8000
-      DDB_TABLE: narwal
+      SQLITE_PATH: /app/db/narwal.db
       JWT_SECRET: dev-only-change-me
       PLATFORM_ADMIN_USERNAME: admin
       PLATFORM_ADMIN_PASSWORD: admin
@@ -73,13 +65,12 @@ services:
       DETECTOR_SCORE_THRESHOLD: "0.5"
     volumes:
       - ./data:/app/data:ro
+      - ./db:/app/db
     depends_on:
       minio:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
-      dynamodb:
-        condition: service_started
 
 volumes:
   minio_data:
