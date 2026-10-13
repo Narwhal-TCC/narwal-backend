@@ -12,6 +12,7 @@ from app.core.errors import (
     InvalidImageError,
     ModelUnavailableError,
     StorageError,
+    UnknownModelError,
     ValidationError,
 )
 from app.services.analyze import MAX_IMAGE_BYTES, AnalyzeService
@@ -73,6 +74,21 @@ class UnavailableModelGateway:
 
     def predict(self, image_array):  # pragma: no cover - never reached
         raise AssertionError("predict must not run when the model is unavailable")
+
+
+class SpyModelGateway(FakeModelGateway):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.ensure_calls = 0
+        self.predict_calls = 0
+
+    def ensure_model_loaded(self):
+        self.ensure_calls += 1
+        return super().ensure_model_loaded()
+
+    def predict(self, image_array):
+        self.predict_calls += 1
+        return super().predict(image_array)
 
 
 class HangingModelGateway:
@@ -401,3 +417,139 @@ def test_inference_timeout_returns_timeout_error_without_success_row():
     assert elapsed < 4
     assert store.puts == []
     assert repository.puts == []
+
+
+@pytest.mark.parametrize("model_id", [None, ""])
+def test_analyze_omitted_or_empty_model_id_stores_two_stage_pt(model_id):
+    repository = FakeAnalysisRepository()
+    service = build_service(repository=repository)
+
+    result = service.analyze_image(
+        "org-1",
+        "user-1",
+        "image/png",
+        png_bytes(),
+        model_id=model_id,
+    )
+
+    assert result.model_id == "two-stage-pt"
+    assert repository.puts[0]["model_id"] == "two-stage-pt"
+
+
+def test_analyze_explicit_two_stage_pt_stores_two_stage_pt():
+    repository = FakeAnalysisRepository()
+    service = build_service(repository=repository)
+
+    result = service.analyze_image(
+        "org-1",
+        "user-1",
+        "image/png",
+        png_bytes(),
+        model_id="two-stage-pt",
+    )
+
+    assert result.model_id == "two-stage-pt"
+    assert repository.puts[0]["model_id"] == "two-stage-pt"
+
+
+def test_analyze_unknown_model_id_raises_without_gateway_or_repository_write():
+    store = FakeObjectStore()
+    repository = FakeAnalysisRepository()
+    gateway = SpyModelGateway()
+    service = build_service(gateway=gateway, store=store, repository=repository)
+
+    with pytest.raises(UnknownModelError) as excinfo:
+        service.analyze_image(
+            "org-1",
+            "user-1",
+            "image/png",
+            png_bytes(),
+            model_id="not-a-model",
+        )
+
+    assert excinfo.value.code == "UNKNOWN_MODEL"
+    assert excinfo.value.status_code == 400
+    assert excinfo.value.message == "Unknown model id"
+    assert gateway.ensure_calls == 0
+    assert gateway.predict_calls == 0
+    assert store.puts == []
+    assert repository.puts == []
+
+
+def test_analyze_bad_image_with_unknown_model_id_raises_invalid_image_first():
+    store = FakeObjectStore()
+    repository = FakeAnalysisRepository()
+    gateway = SpyModelGateway()
+    service = build_service(gateway=gateway, store=store, repository=repository)
+
+    with pytest.raises(InvalidImageError) as excinfo:
+        service.analyze_image(
+            "org-1",
+            "user-1",
+            "image/png",
+            b"not-an-image",
+            model_id="not-a-model",
+        )
+
+    assert excinfo.value.code == "INVALID_IMAGE"
+    assert gateway.ensure_calls == 0
+    assert gateway.predict_calls == 0
+    assert store.puts == []
+    assert repository.puts == []
+
+
+def test_analyze_model_unavailable_with_model_id_leaves_no_insert():
+    store = FakeObjectStore()
+    repository = FakeAnalysisRepository()
+    service = build_service(
+        gateway=UnavailableModelGateway(),
+        store=store,
+        repository=repository,
+    )
+
+    with pytest.raises(ModelUnavailableError):
+        service.analyze_image(
+            "org-1",
+            "user-1",
+            "image/png",
+            png_bytes(),
+            model_id="two-stage-pt",
+        )
+
+    assert store.puts == []
+    assert repository.puts == []
+
+
+def test_analyze_canonical_row_is_stored_with_exact_field_values():
+    repository = FakeAnalysisRepository()
+    gateway = FakeModelGateway(
+        raw_output=[
+            {
+                "x1": 10.0,
+                "y1": 20.0,
+                "x2": 30.0,
+                "y2": 40.0,
+                "detector_score": 0.91,
+                "label": "MILCO",
+                "confidence": 0.88,
+            }
+        ]
+    )
+    service = build_service(gateway=gateway, repository=repository)
+
+    result = service.analyze_image("org-1", "user-1", "image/png", png_bytes())
+
+    assert len(result.detections) == 1
+    detection = result.detections[0]
+    assert (detection.x1, detection.y1, detection.x2, detection.y2) == (
+        10.0,
+        20.0,
+        30.0,
+        40.0,
+    )
+    assert detection.detector_score == 0.91
+    assert detection.label == "MILCO"
+    assert detection.confidence == 0.88
+    persisted = repository.puts[0]["detections"][0]
+    assert persisted["confidence"] == 0.88
+    assert persisted["label"] == "MILCO"

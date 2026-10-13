@@ -15,6 +15,7 @@ from app.repositories.s3_store import DEFAULT_PRESIGN_EXPIRES_SECONDS, S3ObjectS
 from app.schemas.analysis import AnalysisResult
 from app.services.detection_adapter import to_detections
 from app.services.model_gateway import ModelGateway
+from app.services.model_registry import resolve_model_id
 from app.services.primary_class import compute_primary_class, count_milco
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -44,6 +45,7 @@ class AnalyzeService:
         campaign_name: str | None = None,
         coordinates: str | None = None,
         collected_at: str | datetime | None = None,
+        model_id: str | None = None,
     ) -> AnalysisResult:
         validated_metadata = self._validate_metadata(
             campaign_name=campaign_name,
@@ -53,6 +55,7 @@ class AnalyzeService:
         width, height, image_content_type, ext, image_array = self._validate_image(
             content_type, data
         )
+        resolved_model_id = resolve_model_id(model_id)
 
         # Loading happens before any write so a model failure never leaves an analysis behind.
         self.model_gateway.ensure_model_loaded()
@@ -95,6 +98,7 @@ class AnalyzeService:
             image_content_type=image_content_type,
             created_at=created_at.isoformat(),
             inference_ms=inference_ms,
+            model_id=resolved_model_id,
         )
         return AnalysisResult(
             id=analysis_id,
@@ -120,6 +124,7 @@ class AnalyzeService:
             ),
             created_at=created_at,
             inference_ms=inference_ms,
+            model_id=resolved_model_id,
         )
 
     def _validate_metadata(
