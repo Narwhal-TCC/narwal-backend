@@ -14,6 +14,7 @@ from app.schemas.analysis import (
     ReviewStatus,
 )
 from app.services.detection_adapter import suppress_overlapping
+from app.services.model_registry import DEFAULT_MODEL_ID
 
 VALID_PRIMARY_CLASSES = frozenset({"MILCO", "NOMBO"})
 VALID_REVIEW_STATUSES = frozenset({"pending", "confirmed", "false_positive"})
@@ -152,6 +153,13 @@ class HistoryService:
         ]
         return suppress_overlapping(parsed)
 
+    @staticmethod
+    def _record_model_id(record: dict) -> str:
+        value = record.get("model_id")
+        if value is None:
+            return DEFAULT_MODEL_ID
+        return value
+
     def _to_summary(self, record: dict) -> AnalysisSummary:
         return AnalysisSummary(
             id=record["id"],
@@ -167,6 +175,7 @@ class HistoryService:
             created_at=record["created_at"],
             inference_ms=record.get("inference_ms"),
             detection_count=len(self._visible_detections(record)),
+            model_id=self._record_model_id(record),
         )
 
     def _to_result(self, record: dict) -> AnalysisResult:
@@ -190,4 +199,5 @@ class HistoryService:
             ),
             created_at=record["created_at"],
             inference_ms=record.get("inference_ms"),
+            model_id=self._record_model_id(record),
         )

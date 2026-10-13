@@ -27,8 +27,9 @@ def record(
     coordinates: str | None = None,
     collected_at: str | None = None,
     created_at: str = "2026-09-13T12:00:00+00:00",
+    model_id: str | None = "two-stage-pt",
 ) -> dict:
-    return {
+    payload = {
         "id": analysis_id,
         "org_id": org_id,
         "user_id": "user-1",
@@ -45,6 +46,9 @@ def record(
         "created_at": created_at,
         "inference_ms": 42,
     }
+    if model_id is not None:
+        payload["model_id"] = model_id
+    return payload
 
 
 class FakeAnalysisRepository:
@@ -402,3 +406,26 @@ def test_get_org_stats_populated_org():
     assert stats.last_analysis is not None
     assert stats.last_analysis.id == "an-3"
     assert stats.active_campaign == "Beta"
+
+
+def test_get_list_and_stats_last_analysis_return_stored_model_id():
+    service = build_service([record("an-1", "org-1", model_id="two-stage-pt")])
+
+    detail = service.get_analysis("org-1", "an-1")
+    summary = service.list_analyses("org-1").items[0]
+    stats = service.get_org_stats("org-1")
+
+    assert detail.model_id == "two-stage-pt"
+    assert summary.model_id == "two-stage-pt"
+    assert stats.last_analysis is not None
+    assert stats.last_analysis.model_id == "two-stage-pt"
+
+
+def test_history_without_model_id_on_record_defaults_to_two_stage_pt():
+    stored = record("an-legacy", "org-1")
+    del stored["model_id"]
+    service = build_service([stored])
+
+    assert service.get_analysis("org-1", "an-legacy").model_id == "two-stage-pt"
+    assert service.list_analyses("org-1").items[0].model_id == "two-stage-pt"
+    assert service.get_org_stats("org-1").last_analysis.model_id == "two-stage-pt"
