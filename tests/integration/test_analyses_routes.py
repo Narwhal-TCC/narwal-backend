@@ -698,21 +698,27 @@ def test_corrupt_database_returns_store_unavailable_on_analysis_routes(
     headers = {"Authorization": f"Bearer {token}"}
     analysis_id = "01J0000000000000000000000"
 
+    store_message = "Metadata store is unavailable"
+
     post = post_image(client, headers, png_bytes())
     assert post.status_code == 503
     assert post.json()["code"] == "STORE_UNAVAILABLE"
+    assert post.json()["message"] == store_message
 
     listing = client.get("/analyses", headers=headers)
     assert listing.status_code == 503
     assert listing.json()["code"] == "STORE_UNAVAILABLE"
+    assert listing.json()["message"] == store_message
 
     stats = client.get("/analyses/stats", headers=headers)
     assert stats.status_code == 503
     assert stats.json()["code"] == "STORE_UNAVAILABLE"
+    assert stats.json()["message"] == store_message
 
     detail = client.get(f"/analyses/{analysis_id}", headers=headers)
     assert detail.status_code == 503
     assert detail.json()["code"] == "STORE_UNAVAILABLE"
+    assert detail.json()["message"] == store_message
 
     patch_response = client.patch(
         f"/analyses/{analysis_id}",
@@ -721,6 +727,7 @@ def test_corrupt_database_returns_store_unavailable_on_analysis_routes(
     )
     assert patch_response.status_code == 503
     assert patch_response.json()["code"] == "STORE_UNAVAILABLE"
+    assert patch_response.json()["message"] == store_message
 
 
 def test_failed_insert_returns_503_and_leaves_list_unchanged(
