@@ -37,6 +37,7 @@ class AnalysisResult(BaseModel):
     image_url: str | None = None
     created_at: datetime
     inference_ms: int | None = None
+    model_id: str = "two-stage-pt"
 
 
 class AnalysisSummary(BaseModel):
@@ -53,6 +54,7 @@ class AnalysisSummary(BaseModel):
     created_at: datetime
     inference_ms: int | None = None
     detection_count: int
+    model_id: str = "two-stage-pt"
 
 
 class AnalysisListResponse(BaseModel):

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from app.schemas.analysis import AnalysisResult, Detection
+from app.schemas.analysis import AnalysisResult, AnalysisSummary, Detection
 from app.schemas.auth import LoginRequest, TokenResponse
 
 
@@ -15,8 +15,23 @@ def test_analysis_result_accepts_empty_detections():
         image_s3_key="analyses/org-demo/01JABCDEF/original.png",
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
         inference_ms=42,
+        model_id="two-stage-pt",
     )
     assert result.detections == []
+    assert result.model_id == "two-stage-pt"
+
+
+def test_analysis_summary_includes_model_id():
+    summary = AnalysisSummary(
+        id="01JABCDEF",
+        org_id="org-demo",
+        user_id="user-1",
+        status="succeeded",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        detection_count=0,
+        model_id="two-stage-pt",
+    )
+    assert summary.model_id == "two-stage-pt"
 
 
 def test_detection_accepts_milco_and_nombo_labels():
