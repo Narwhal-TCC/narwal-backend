@@ -79,9 +79,12 @@ def test_unknown_label_falls_back_to_nombo():
     assert to_detections(raw, 100, 100)[0].label == "NOMBO"
 
 
-def test_keras_scalar_and_yolo_rows_are_ignored():
-    assert to_detections([[0.73]], 640, 480) == []
-    assert to_detections([(0.5, 0.5, 0.25, 0.5, 0.9)], 640, 480) == []
+def test_keras_scalar_returns_empty_detections():
+    assert to_detections([[0.73]], image_width=640, image_height=480) == []
+
+
+def test_yolo_five_number_tuple_returns_empty_detections():
+    assert to_detections([(0.5, 0.5, 0.25, 0.5, 0.9)], image_width=640, image_height=480) == []
 
 
 def test_incomplete_stage_rows_are_skipped():
