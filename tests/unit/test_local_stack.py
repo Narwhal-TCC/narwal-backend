@@ -31,3 +31,10 @@ def test_env_example_documents_sqlite_path():
     assert "SQLITE_PATH=db/narwal.db" in env_example
     assert "DYNAMODB_ENDPOINT_URL" not in env_example
     assert "DDB_TABLE" not in env_example
+
+
+def test_pyproject_does_not_request_dynamodb_moto_extra():
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert "moto[s3,dynamodb]" not in pyproject
+    assert "moto[s3]" in pyproject
