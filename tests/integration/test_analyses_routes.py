@@ -130,6 +130,8 @@ def post_image(
     headers: dict,
     data: bytes,
     content_type: str = "image/png",
+    *,
+    query_params: dict | None = None,
     **form_fields: str,
 ):
     return client.post(
@@ -137,7 +139,24 @@ def post_image(
         headers=headers,
         files={"file": ("sonar.png", data, content_type)},
         data=form_fields,
+        params=query_params or {},
     )
+
+
+def assert_model_id_on_detail_list_and_stats(
+    client: TestClient,
+    headers: dict,
+    analysis_id: str,
+    expected: str,
+) -> None:
+    detail = client.get(f"/analyses/{analysis_id}", headers=headers).json()
+    assert detail["model_id"] == expected
+    listed = client.get("/analyses", headers=headers).json()["items"]
+    match = next(item for item in listed if item["id"] == analysis_id)
+    assert match["model_id"] == expected
+    stats = client.get("/analyses/stats", headers=headers).json()
+    assert stats["last_analysis"]["id"] == analysis_id
+    assert stats["last_analysis"]["model_id"] == expected
 
 
 def jpeg_bytes(width: int = 640, height: int = 480) -> bytes:
@@ -801,4 +820,110 @@ def test_failed_insert_returns_503_and_leaves_list_unchanged(
 
     assert response.status_code == 503
     assert response.json()["code"] == "STORE_UNAVAILABLE"
+    assert after == before
+
+
+@pytest.mark.parametrize(
+    ("form_model_id", "query_model_id"),
+    [
+        (None, None),
+        ("", None),
+        (None, "ignored-id"),
+    ],
+)
+def test_post_analyses_default_model_id_on_detail_list_and_stats(
+    analyses_client, form_model_id, query_model_id
+):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+    form = {}
+    if form_model_id is not None:
+        form["model_id"] = form_model_id
+    query = {"model_id": query_model_id} if query_model_id is not None else None
+
+    response = post_image(
+        client,
+        headers,
+        png_bytes(),
+        query_params=query,
+        **form,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model_id"] == "two-stage-pt"
+    assert_model_id_on_detail_list_and_stats(
+        client, headers, body["id"], "two-stage-pt"
+    )
+
+
+def test_post_analyses_explicit_two_stage_pt_returns_two_stage_pt(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(client, headers, png_bytes(), model_id="two-stage-pt")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model_id"] == "two-stage-pt"
+    assert_model_id_on_detail_list_and_stats(
+        client, headers, body["id"], "two-stage-pt"
+    )
+
+
+@pytest.mark.parametrize("bad_model_id", ["two-stage-pt ", "Two-Stage-Pt"])
+def test_post_analyses_unknown_model_id_returns_400_and_leaves_list_unchanged(
+    analyses_client, bad_model_id
+):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+    before = client.get("/analyses", headers=headers).json()["items"]
+
+    response = post_image(client, headers, png_bytes(), model_id=bad_model_id)
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "UNKNOWN_MODEL"
+    assert body["message"] == "Unknown model id"
+    after = client.get("/analyses", headers=headers).json()["items"]
+    assert after == before
+
+
+def test_post_analyses_invalid_image_with_unknown_model_returns_invalid_image(
+    analyses_client,
+):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(
+        client,
+        headers,
+        b"not-an-image",
+        model_id="not-a-model",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "INVALID_IMAGE"
+
+
+def test_post_analyses_unknown_model_without_token_returns_unauthorized(analyses_client):
+    client, _ = analyses_client
+
+    response = post_image(client, {}, png_bytes(), model_id="not-a-model")
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "UNAUTHORIZED"
+
+
+def test_post_analyses_model_unavailable_leaves_list_unchanged(analyses_client):
+    client, gateway = analyses_client
+    gateway.unavailable = True
+    headers = auth_headers(client, "operator")
+    before = client.get("/analyses", headers=headers).json()["items"]
+
+    response = post_image(client, headers, png_bytes(), model_id="two-stage-pt")
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "MODEL_UNAVAILABLE"
+    after = client.get("/analyses", headers=headers).json()["items"]
     assert after == before

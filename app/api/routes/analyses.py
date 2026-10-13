@@ -21,6 +21,7 @@ async def create_analysis(
     campaign_name: str | None = Form(None),
     coordinates: str | None = Form(None),
     collected_at: str | None = Form(None),
+    model_id: str | None = Form(default=None),
     current_user: dict[str, str] = Depends(get_current_user),
     service: AnalyzeService = Depends(get_analyze_service),
 ) -> AnalysisResult:
@@ -35,6 +36,7 @@ async def create_analysis(
         campaign_name=campaign_name,
         coordinates=coordinates,
         collected_at=collected_at,
+        model_id=model_id,
     )
 
 
