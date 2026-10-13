@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.core.errors import StoreUnavailableError
-from app.repositories.analyses import AnalysisRepository, new_analysis_id
+from app.repositories.analyses import AnalysisRepository, _to_record, new_analysis_id
 
 DETECTIONS = [
     {
@@ -200,6 +200,58 @@ def test_image_s3_key_persisted_without_blob_column(repository):
     record = repo.get_analysis("org-1", "an-1")
     assert record["image_s3_key"] == "analyses/org-1/an-1/original.png"
     assert "image_blob" not in columns
+
+
+def test_put_get_round_trips_model_id_two_stage_pt(repository):
+    repo, _ = repository
+    _put(repo, "an-model", "org-1")
+
+    record = repo.get_analysis("org-1", "an-model")
+
+    assert record["model_id"] == "two-stage-pt"
+
+
+def test_null_model_id_in_sql_reads_back_as_two_stage_pt():
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        """
+        CREATE TABLE analyses (
+          analysis_id TEXT, org_id TEXT, user_id TEXT, status TEXT,
+          review_status TEXT, primary_class TEXT, campaign_name TEXT,
+          coordinates TEXT, collected_at TEXT, milco_detection_count INTEGER,
+          detections TEXT, image_s3_key TEXT, image_content_type TEXT,
+          created_at TEXT, inference_ms INTEGER, model_id TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO analyses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "an-null-model",
+            "org-1",
+            "user-1",
+            "succeeded",
+            "pending",
+            None,
+            None,
+            None,
+            None,
+            0,
+            "[]",
+            "analyses/org-1/an-null-model/original.png",
+            "image/png",
+            "2026-09-13T12:00:00+00:00",
+            42,
+            None,
+        ),
+    )
+    row = conn.execute("SELECT * FROM analyses").fetchone()
+    conn.close()
+
+    assert _to_record(row)["model_id"] == "two-stage-pt"
 
 
 def test_reopen_same_path_returns_stored_analysis(repository):

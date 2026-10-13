@@ -7,8 +7,16 @@ from ulid import ULID
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError
 from app.repositories.metadata_db import connect
+from app.services.model_registry import DEFAULT_MODEL_ID
 
 DEFAULT_LIST_LIMIT = 50
+
+_ANALYSIS_COLUMNS = """
+    analysis_id, org_id, user_id, status, review_status,
+    primary_class, campaign_name, coordinates, collected_at,
+    milco_detection_count, detections, image_s3_key,
+    image_content_type, created_at, inference_ms, model_id
+"""
 
 
 def new_analysis_id() -> str:
@@ -34,6 +42,7 @@ def _to_record(row: sqlite3.Row) -> dict:
         "image_content_type": row["image_content_type"],
         "created_at": row["created_at"],
         "inference_ms": int(inference_ms) if inference_ms is not None else None,
+        "model_id": row["model_id"] or DEFAULT_MODEL_ID,
     }
 
 
@@ -66,6 +75,7 @@ class AnalysisRepository:
         coordinates: str | None = None,
         collected_at: str | None = None,
         milco_detection_count: int = 0,
+        model_id: str = DEFAULT_MODEL_ID,
     ) -> dict:
         conn = self._with_connection()
         try:
@@ -75,8 +85,8 @@ class AnalysisRepository:
                   analysis_id, org_id, user_id, status, review_status,
                   primary_class, campaign_name, coordinates, collected_at,
                   milco_detection_count, detections, image_s3_key,
-                  image_content_type, created_at, inference_ms
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  image_content_type, created_at, inference_ms, model_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     analysis_id,
@@ -94,6 +104,7 @@ class AnalysisRepository:
                     image_content_type,
                     created_at,
                     inference_ms,
+                    model_id,
                 ),
             )
             conn.commit()
@@ -138,11 +149,8 @@ class AnalysisRepository:
         conn = self._with_connection()
         try:
             return conn.execute(
-                """
-                SELECT analysis_id, org_id, user_id, status, review_status,
-                       primary_class, campaign_name, coordinates, collected_at,
-                       milco_detection_count, detections, image_s3_key,
-                       image_content_type, created_at, inference_ms
+                f"""
+                SELECT {_ANALYSIS_COLUMNS}
                 FROM analyses WHERE org_id = ? AND analysis_id = ?
                 """,
                 (org_id, analysis_id),
@@ -165,11 +173,8 @@ class AnalysisRepository:
         conn = self._with_connection()
         try:
             rows = conn.execute(
-                """
-                SELECT analysis_id, org_id, user_id, status, review_status,
-                       primary_class, campaign_name, coordinates, collected_at,
-                       milco_detection_count, detections, image_s3_key,
-                       image_content_type, created_at, inference_ms
+                f"""
+                SELECT {_ANALYSIS_COLUMNS}
                 FROM analyses
                 WHERE org_id = ?
                 ORDER BY created_at DESC, analysis_id DESC
