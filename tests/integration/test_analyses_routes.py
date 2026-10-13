@@ -543,6 +543,113 @@ def test_analyze_stored_image_is_readable_from_object_storage(analyses_client):
     assert len(payload) > 0
 
 
+def _wire_analyses_app(db_path: Path, gateway: ConfigurableModelGateway, s3) -> None:
+    users = UserRepository(str(db_path))
+    object_store = S3ObjectStore(client=s3, bucket=BUCKET)
+    object_store.ensure_bucket()
+    analyses = AnalysisRepository(str(db_path))
+    app.dependency_overrides[get_user_repository] = lambda: users
+    app.dependency_overrides[get_model_gateway] = lambda: gateway
+    app.dependency_overrides[get_analyze_service] = lambda: AnalyzeService(
+        model_gateway=gateway,
+        object_store=object_store,
+        repository=analyses,
+        timeout_seconds=5,
+    )
+    app.dependency_overrides[get_history_service] = lambda: HistoryService(
+        repository=analyses,
+        object_store=object_store,
+    )
+
+
+def test_stored_analysis_readable_via_http_after_new_client_on_same_file(
+    monkeypatch, tmp_path: Path
+):
+    db_path = tmp_path / "http-persist.db"
+    monkeypatch.setenv("SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("JWT_SECRET", "integration-test-secret-at-least-32-bytes")
+    monkeypatch.setenv("S3_BUCKET", BUCKET)
+    monkeypatch.delenv("S3_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("S3_PUBLIC_ENDPOINT", raising=False)
+    get_settings.cache_clear()
+    get_object_store.cache_clear()
+
+    gateway = ConfigurableModelGateway()
+    with mock_aws():
+        s3 = boto3.client("s3", region_name="us-east-1")
+        seed_users = UserRepository(str(db_path))
+        seed_users.put_org("org-1", "Sonar Team")
+        seed_users.put_user("user-1", "org-1", "operator", hash_password("pw"), "member")
+
+        _wire_analyses_app(db_path, gateway, s3)
+        with TestClient(app) as client:
+            headers = auth_headers(client, "operator")
+            created = post_image(
+                client,
+                headers,
+                png_bytes(),
+                campaign_name="Persist Survey",
+            ).json()
+            analysis_id = created["id"]
+        app.dependency_overrides.clear()
+
+        _wire_analyses_app(db_path, gateway, s3)
+        with TestClient(app) as reopened_client:
+            headers = auth_headers(reopened_client, "operator")
+            response = reopened_client.get(f"/analyses/{analysis_id}", headers=headers)
+
+        app.dependency_overrides.clear()
+    get_settings.cache_clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == analysis_id
+    assert body["campaign_name"] == "Persist Survey"
+
+
+def test_get_analysis_returns_confidence_088_as_json_number(analyses_client):
+    client, gateway = analyses_client
+    gateway.raw_output = [_stage(confidence=0.88)]
+    headers = auth_headers(client, "operator")
+
+    created = post_image(client, headers, png_bytes()).json()
+    detail = client.get(f"/analyses/{created['id']}", headers=headers).json()
+
+    confidence = detail["detections"][0]["confidence"]
+    assert confidence == 0.88
+    assert isinstance(confidence, float)
+
+
+def test_list_analyses_returns_newest_created_first(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    older = post_image(client, headers, png_bytes(), campaign_name="Older Run").json()
+    newer = post_image(client, headers, png_bytes(), campaign_name="Newer Run").json()
+
+    response = client.get("/analyses", headers=headers)
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["items"]] == [newer["id"], older["id"]]
+
+
+def test_patch_confirmed_then_get_returns_confirmed_review_status(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+    created = post_image(client, headers, png_bytes()).json()
+    analysis_id = created["id"]
+
+    patch_response = client.patch(
+        f"/analyses/{analysis_id}",
+        headers=headers,
+        json={"review_status": "confirmed"},
+    )
+    assert patch_response.status_code == 200
+
+    detail = client.get(f"/analyses/{analysis_id}", headers=headers).json()
+    assert detail["review_status"] == "confirmed"
+
+
 def _corrupt_analyses_client(monkeypatch, tmp_path: Path):
     corrupt = tmp_path / "corrupt-analyses.db"
     corrupt.write_bytes(b"NOT SQLITE")
