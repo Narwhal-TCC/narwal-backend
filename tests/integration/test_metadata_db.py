@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.core.errors import StoreUnavailableError
+from app.repositories import metadata_db
 from app.repositories.metadata_db import connect
 
 
@@ -28,6 +29,28 @@ def test_connect_creates_parent_directory_and_schema(tmp_path: Path):
         assert foreign_keys == 1
     finally:
         conn.close()
+
+
+def test_connect_probes_existing_file_before_opening_for_write(tmp_path: Path):
+    db_path = tmp_path / "corrupt.db"
+    garbage = b"NOT A SQLITE DATABASE FILE"
+    db_path.write_bytes(garbage)
+    probe_calls: list[bytes] = []
+    real_probe = metadata_db._probe_existing_file
+
+    def tracking_probe(path: Path) -> None:
+        probe_calls.append(path.read_bytes())
+        real_probe(path)
+
+    metadata_db._probe_existing_file = tracking_probe  # type: ignore[method-assign]
+    try:
+        with pytest.raises(StoreUnavailableError):
+            connect(db_path)
+    finally:
+        metadata_db._probe_existing_file = real_probe  # type: ignore[method-assign]
+
+    assert probe_calls == [garbage]
+    assert db_path.read_bytes() == garbage
 
 
 def test_connect_on_garbage_file_raises_and_leaves_bytes_unchanged(tmp_path: Path):

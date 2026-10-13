@@ -12,10 +12,12 @@ from app.api.deps import (
 from app.bootstrap.seed import run_seed
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError
+import app.main as main_module
 from app.main import app
 from app.services.model_gateway import FakeModelGateway
 
 logger = logging.getLogger("app.main")
+_production_bootstrap = main_module.bootstrap
 
 
 def _sqlite_only_bootstrap() -> None:
@@ -29,7 +31,14 @@ def _sqlite_only_bootstrap() -> None:
 
 @pytest.fixture(autouse=True)
 def sqlite_only_bootstrap(monkeypatch):
-    monkeypatch.setattr("app.main.bootstrap", _sqlite_only_bootstrap)
+    monkeypatch.setattr(main_module, "bootstrap", _sqlite_only_bootstrap)
+
+
+@pytest.fixture
+def production_bootstrap(monkeypatch):
+    """Run the real app.main.bootstrap (autouse stub replaces it for most tests)."""
+    monkeypatch.setattr(main_module, "bootstrap", _production_bootstrap)
+    yield _production_bootstrap
 
 
 @pytest.fixture(autouse=True)

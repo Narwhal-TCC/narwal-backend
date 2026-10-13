@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
+from moto import mock_aws
 
 from app.core.config import get_settings
 from app.core.security import create_access_token
@@ -35,20 +36,23 @@ def test_health_ok_when_sqlite_path_is_corrupt(monkeypatch, tmp_path: Path):
 
 
 def test_bootstrap_logs_metadata_store_unavailable_for_corrupt_file(
-    monkeypatch, tmp_path: Path, caplog
+    monkeypatch, tmp_path: Path, caplog, production_bootstrap
 ):
-    from app.main import bootstrap
-
     corrupt = tmp_path / "corrupt.db"
     garbage = b"not-a-sqlite-file"
     corrupt.write_bytes(garbage)
     monkeypatch.setenv("SQLITE_PATH", str(corrupt))
     get_settings.cache_clear()
 
-    caplog.set_level(logging.WARNING)
-    bootstrap()
+    caplog.set_level(logging.WARNING, logger="app.main")
+    with mock_aws():
+        production_bootstrap()
 
-    assert any("metadata store unavailable" in record.message for record in caplog.records)
+    assert any(
+        record.name == "app.main"
+        and "metadata store unavailable" in record.message
+        for record in caplog.records
+    )
     assert corrupt.read_bytes() == garbage
 
 
