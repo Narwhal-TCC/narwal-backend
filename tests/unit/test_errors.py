@@ -11,6 +11,7 @@ from app.core.errors import (
     StorageError,
     StoreUnavailableError,
     UnauthorizedError,
+    UnknownModelError,
     register_error_handlers,
 )
 
@@ -33,6 +34,15 @@ def test_invalid_image_returns_400_with_code():
     body = response.json()
     assert body["code"] == "INVALID_IMAGE"
     assert body["message"] == "Unsupported image format"
+
+
+def test_unknown_model_returns_400_with_code_and_default_message():
+    client = _client_for(UnknownModelError())
+    response = client.get("/raise")
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "UNKNOWN_MODEL"
+    assert body["message"] == "Unknown model id"
 
 
 def test_model_unavailable_returns_503_with_code():

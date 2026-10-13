@@ -36,6 +36,12 @@ class ValidationError(AppError):
     default_message = "Request validation failed"
 
 
+class UnknownModelError(AppError):
+    code = "UNKNOWN_MODEL"
+    status_code = 400
+    default_message = "Unknown model id"
+
+
 class ModelUnavailableError(AppError):
     code = "MODEL_UNAVAILABLE"
     status_code = 503
