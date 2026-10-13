@@ -40,7 +40,8 @@ def test_bootstrap_logs_metadata_store_unavailable_for_corrupt_file(
     from app.main import bootstrap
 
     corrupt = tmp_path / "corrupt.db"
-    corrupt.write_bytes(b"not-a-sqlite-file")
+    garbage = b"not-a-sqlite-file"
+    corrupt.write_bytes(garbage)
     monkeypatch.setenv("SQLITE_PATH", str(corrupt))
     get_settings.cache_clear()
 
@@ -48,6 +49,7 @@ def test_bootstrap_logs_metadata_store_unavailable_for_corrupt_file(
     bootstrap()
 
     assert any("metadata store unavailable" in record.message for record in caplog.records)
+    assert corrupt.read_bytes() == garbage
 
 
 def test_auth_me_returns_200_with_valid_token_when_store_is_corrupt(
