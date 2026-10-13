@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 from app.api.deps import get_model_gateway
 from app.api.routes.analyses import router as analyses_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.models import router as models_router
 from app.bootstrap.seed import run_seed
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError, register_error_handlers
@@ -56,6 +57,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Narwal API", version="0.1.0", lifespan=lifespan)
 register_error_handlers(app)
 app.include_router(auth_router)
+app.include_router(models_router)
 app.include_router(analyses_router)
 
 
