@@ -64,6 +64,83 @@ def test_connect_on_garbage_file_raises_and_leaves_bytes_unchanged(tmp_path: Pat
     assert db_path.read_bytes() == garbage
 
 
+def _legacy_analyses_schema_without_model_id() -> str:
+    return """
+CREATE TABLE IF NOT EXISTS analyses (
+  analysis_id TEXT NOT NULL,
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  review_status TEXT NOT NULL,
+  primary_class TEXT,
+  campaign_name TEXT,
+  coordinates TEXT,
+  collected_at TEXT,
+  milco_detection_count INTEGER NOT NULL DEFAULT 0,
+  detections TEXT NOT NULL,
+  image_s3_key TEXT NOT NULL,
+  image_content_type TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  inference_ms INTEGER,
+  PRIMARY KEY (org_id, analysis_id)
+);
+"""
+
+
+def test_fresh_database_includes_model_id_without_alter(tmp_path: Path):
+    db_path = tmp_path / "fresh-model-id.db"
+    conn = connect(db_path)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(analyses)").fetchall()}
+        assert "model_id" in columns
+        default_row = conn.execute(
+            "SELECT dflt_value FROM pragma_table_info('analyses') WHERE name = 'model_id'"
+        ).fetchone()
+        assert default_row[0] == "'two-stage-pt'"
+    finally:
+        conn.close()
+
+
+def test_legacy_database_gains_model_id_default_on_existing_rows(tmp_path: Path):
+    db_path = tmp_path / "legacy-model-id.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(_legacy_analyses_schema_without_model_id())
+    conn.execute(
+        """
+        INSERT INTO analyses (
+          analysis_id, org_id, user_id, status, review_status,
+          milco_detection_count, detections, image_s3_key,
+          image_content_type, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "an-legacy",
+            "org-1",
+            "user-1",
+            "succeeded",
+            "pending",
+            0,
+            "[]",
+            "analyses/org-1/an-legacy/original.png",
+            "image/png",
+            "2026-09-13T12:00:00+00:00",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    migrated = connect(db_path)
+    try:
+        columns = {row[1] for row in migrated.execute("PRAGMA table_info(analyses)").fetchall()}
+        assert "model_id" in columns
+        model_id = migrated.execute(
+            "SELECT model_id FROM analyses WHERE analysis_id = 'an-legacy'"
+        ).fetchone()[0]
+        assert model_id == "two-stage-pt"
+    finally:
+        migrated.close()
+
+
 def test_connect_on_valid_existing_file_applies_wal(tmp_path: Path):
     db_path = tmp_path / "existing.db"
     first = connect(db_path)

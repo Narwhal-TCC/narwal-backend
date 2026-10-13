@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS analyses (
   image_content_type TEXT NOT NULL,
   created_at TEXT NOT NULL,
   inference_ms INTEGER,
+  model_id TEXT NOT NULL DEFAULT 'two-stage-pt',
   PRIMARY KEY (org_id, analysis_id)
 );
 
@@ -47,8 +48,20 @@ CREATE INDEX IF NOT EXISTS analyses_org_created
 """
 
 
+def _analyses_column_names(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("PRAGMA table_info(analyses)").fetchall()
+    return {row[1] for row in rows}
+
+
 def ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(_ORGS_SCHEMA + _USERS_SCHEMA + _ANALYSES_SCHEMA)
+    if "model_id" not in _analyses_column_names(conn):
+        conn.execute(
+            """
+            ALTER TABLE analyses
+              ADD COLUMN model_id TEXT NOT NULL DEFAULT 'two-stage-pt'
+            """
+        )
 
 
 def _probe_existing_file(db_path: Path) -> None:
