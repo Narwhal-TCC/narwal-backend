@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import app.main as main_module
 from app.api.deps import (
     get_analysis_repository,
     get_model_gateway,
@@ -12,7 +13,6 @@ from app.api.deps import (
 from app.bootstrap.seed import run_seed
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError
-import app.main as main_module
 from app.main import app
 from app.services.model_gateway import FakeModelGateway
 
