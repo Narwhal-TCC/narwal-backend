@@ -13,7 +13,6 @@ from app.services.ai_analyst import (
     PAYLOAD_TOP_LEVEL_KEYS,
     RECOMMENDATION_MAX_LEN,
     SUMMARY_MAX_LEN,
-    SYSTEM_PROMPT,
     AiAnalyst,
     AnalystContext,
     LlmAnalysisContent,
@@ -160,6 +159,28 @@ def _transport(handler) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(handler))
 
 
+def _log_record_surfaces(record: logging.LogRecord) -> list[str]:
+    surfaces: list[str] = []
+    msg = record.msg
+    surfaces.append(msg if isinstance(msg, str) else str(msg))
+    if record.args:
+        if isinstance(record.args, tuple):
+            surfaces.extend(str(arg) for arg in record.args)
+        else:
+            surfaces.append(str(record.args))
+    surfaces.append(record.getMessage())
+    return surfaces
+
+
+def _assert_needles_absent_from_caplog(caplog, *needles: str) -> None:
+    for record in caplog.records:
+        blob = "\n".join(_log_record_surfaces(record))
+        for needle in needles:
+            assert needle not in blob, (
+                f"forbidden substring {needle!r} found in log record: {blob!r}"
+            )
+
+
 def test_analyze_ready_parses_valid_response():
     captured: dict = {}
 
@@ -264,7 +285,7 @@ def test_analyze_logs_exclude_api_key_and_prompt(caplog):
             },
         )
 
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.INFO, logger="app.services.ai_analyst")
     analyst = AiAnalyst(
         settings=_llm_settings(llm_api_key=secret),
         client=_transport(handler),
@@ -278,7 +299,13 @@ def test_analyze_logs_exclude_api_key_and_prompt(caplog):
     finally:
         ai_mod.SYSTEM_PROMPT = original_prompt
 
-    log_text = caplog.text
-    assert secret not in log_text
-    assert prompt_marker not in log_text
-    assert "ai_analysis status=ready" in log_text
+    assert any(
+        "ai_analysis status=ready" in record.getMessage() for record in caplog.records
+    )
+    _assert_needles_absent_from_caplog(
+        caplog,
+        secret,
+        prompt_marker,
+        original_prompt,
+        "Não invente detecções que não estejam no JSON de entrada.",
+    )
