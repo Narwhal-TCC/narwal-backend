@@ -1,5 +1,10 @@
 import json
+import logging
 
+import httpx
+import pytest
+
+from app.core.config import Settings
 from app.schemas.analysis import AiDetectionNote, Detection
 from app.services.ai_analyst import (
     CAVEAT_MAX_LEN,
@@ -8,6 +13,8 @@ from app.services.ai_analyst import (
     PAYLOAD_TOP_LEVEL_KEYS,
     RECOMMENDATION_MAX_LEN,
     SUMMARY_MAX_LEN,
+    SYSTEM_PROMPT,
+    AiAnalyst,
     AnalystContext,
     LlmAnalysisContent,
     build_payload,
@@ -127,3 +134,151 @@ def test_postprocess_caps_caveats_and_truncates_note():
     assert len(processed.caveats[0]) == CAVEAT_MAX_LEN
     assert len(processed.detections[0].note) == NOTE_MAX_LEN
     assert len(processed.recommendation) <= RECOMMENDATION_MAX_LEN
+
+
+def _llm_settings(**overrides) -> Settings:
+    base = {
+        "llm_base_url": "http://llm.test/v1",
+        "llm_model": "openai/gpt-oss-120b",
+        "llm_api_key": "test-key",
+        "llm_timeout_seconds": 10.0,
+    }
+    base.update(overrides)
+    return Settings(**base, _env_file=None)
+
+
+def _ready_llm_json() -> dict:
+    return {
+        "summary": "Resumo.",
+        "detections": [{"index": 0, "note": "Nota."}],
+        "recommendation": "Recomendar.",
+        "caveats": ["Cuidado."],
+    }
+
+
+def _transport(handler) -> httpx.Client:
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_analyze_ready_parses_valid_response():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["body"] = json.loads(request.content.decode())
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": json.dumps(_ready_llm_json())}}
+                ]
+            },
+        )
+
+    analyst = AiAnalyst(
+        settings=_llm_settings(),
+        client=_transport(handler),
+    )
+    result = analyst.analyze(_context())
+    assert result.status == "ready"
+    assert result.reason is None
+    assert result.summary == "Resumo."
+    assert result.detections[0].note == "Nota."
+    assert result.model == "openai/gpt-oss-120b"
+    assert result.generated_at is not None
+    assert captured["url"] == "http://llm.test/v1/chat/completions"
+    assert captured["body"]["model"] == "openai/gpt-oss-120b"
+
+
+def test_analyze_disabled_when_api_key_empty_makes_no_http_call():
+    called = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal called
+        called = True
+        return httpx.Response(200, json={})
+
+    analyst = AiAnalyst(
+        settings=_llm_settings(llm_api_key=""),
+        client=_transport(handler),
+    )
+    result = analyst.analyze(_context())
+    assert result.status == "unavailable"
+    assert result.reason == "disabled"
+    assert called is False
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_reason"),
+    [
+        (429, "rate_limited"),
+        (500, "provider_error"),
+    ],
+)
+def test_analyze_maps_http_errors(status_code, expected_reason):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, json={"error": "x"})
+
+    analyst = AiAnalyst(settings=_llm_settings(), client=_transport(handler))
+    result = analyst.analyze(_context())
+    assert result.status == "unavailable"
+    assert result.reason == expected_reason
+
+
+def test_analyze_timeout_maps_to_timeout_reason():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow")
+
+    analyst = AiAnalyst(settings=_llm_settings(), client=_transport(handler))
+    result = analyst.analyze(_context())
+    assert result.reason == "timeout"
+
+
+def test_analyze_invalid_json_maps_to_invalid_response():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "not json"}}]},
+        )
+
+    analyst = AiAnalyst(settings=_llm_settings(), client=_transport(handler))
+    result = analyst.analyze(_context())
+    assert result.reason == "invalid_response"
+
+
+def test_analyze_logs_exclude_api_key_and_prompt(caplog):
+    secret = "super-secret-llm-key"
+    prompt_marker = "whitelist-marker-xyz"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(_ready_llm_json()),
+                        }
+                    }
+                ]
+            },
+        )
+
+    caplog.set_level(logging.INFO)
+    analyst = AiAnalyst(
+        settings=_llm_settings(llm_api_key=secret),
+        client=_transport(handler),
+    )
+    import app.services.ai_analyst as ai_mod
+
+    original_prompt = ai_mod.SYSTEM_PROMPT
+    ai_mod.SYSTEM_PROMPT = prompt_marker
+    try:
+        analyst.analyze(_context())
+    finally:
+        ai_mod.SYSTEM_PROMPT = original_prompt
+
+    log_text = caplog.text
+    assert secret not in log_text
+    assert prompt_marker not in log_text
+    assert "ai_analysis status=ready" in log_text

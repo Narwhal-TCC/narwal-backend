@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import json
+import logging
+import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+import httpx
+from pydantic import BaseModel, Field, ValidationError
 
-from app.schemas.analysis import AiDetectionNote, Detection
+from app.core.config import Settings, get_settings
+from app.schemas.analysis import AiAnalysis, AiDetectionNote, Detection
 from app.services.model_registry import REGISTRY
+
+logger = logging.getLogger(__name__)
 
 SUMMARY_MAX_LEN = 600
 NOTE_MAX_LEN = 300
@@ -116,3 +124,150 @@ def postprocess(content: LlmAnalysisContent, *, detection_count: int) -> LlmAnal
         recommendation=_truncate(content.recommendation, RECOMMENDATION_MAX_LEN),
         caveats=caveats,
     )
+
+
+def _unavailable(reason: str, *, model: str | None = None) -> AiAnalysis:
+    return AiAnalysis(
+        status="unavailable",
+        reason=reason,  # type: ignore[arg-type]
+        summary=None,
+        detections=[],
+        recommendation=None,
+        caveats=[],
+        model=model,
+        generated_at=None,
+    )
+
+
+class AiAnalyst:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self._settings = settings or get_settings()
+        self._client = client
+
+    def analyze(self, context: AnalystContext) -> AiAnalysis:
+        settings = self._settings
+        model_name = settings.llm_model
+        if not (settings.llm_api_key or "").strip():
+            result = _unavailable("disabled", model=model_name)
+            logger.info(
+                "ai_analysis status=%s reason=%s latency_ms=%s model=%s",
+                result.status,
+                result.reason,
+                0,
+                model_name,
+            )
+            return result
+
+        payload = build_payload(context)
+        user_message = json.dumps(payload, ensure_ascii=False)
+        request_body = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.2,
+        }
+        url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {settings.llm_api_key}",
+            "Content-Type": "application/json",
+        }
+        started = time.perf_counter()
+        try:
+            if self._client is not None:
+                response = self._client.post(
+                    url,
+                    json=request_body,
+                    headers=headers,
+                    timeout=settings.llm_timeout_seconds,
+                )
+            else:
+                with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
+                    response = client.post(url, json=request_body, headers=headers)
+        except httpx.TimeoutException:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            result = _unavailable("timeout", model=model_name)
+            logger.info(
+                "ai_analysis status=%s reason=%s latency_ms=%s model=%s",
+                result.status,
+                result.reason,
+                latency_ms,
+                model_name,
+            )
+            return result
+        except httpx.HTTPError:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            result = _unavailable("provider_error", model=model_name)
+            logger.info(
+                "ai_analysis status=%s reason=%s latency_ms=%s model=%s",
+                result.status,
+                result.reason,
+                latency_ms,
+                model_name,
+            )
+            return result
+
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        if response.status_code == 429:
+            result = _unavailable("rate_limited", model=model_name)
+            logger.info(
+                "ai_analysis status=%s reason=%s latency_ms=%s model=%s",
+                result.status,
+                result.reason,
+                latency_ms,
+                model_name,
+            )
+            return result
+        if response.status_code < 200 or response.status_code >= 300:
+            result = _unavailable("provider_error", model=model_name)
+            logger.info(
+                "ai_analysis status=%s reason=%s latency_ms=%s model=%s",
+                result.status,
+                result.reason,
+                latency_ms,
+                model_name,
+            )
+            return result
+
+        try:
+            body = response.json()
+            content_str = body["choices"][0]["message"]["content"]
+            parsed = json.loads(content_str)
+            llm_content = LlmAnalysisContent.model_validate(parsed)
+        except (KeyError, TypeError, json.JSONDecodeError, ValidationError):
+            result = _unavailable("invalid_response", model=model_name)
+            logger.info(
+                "ai_analysis status=%s reason=%s latency_ms=%s model=%s",
+                result.status,
+                result.reason,
+                latency_ms,
+                model_name,
+            )
+            return result
+
+        processed = postprocess(llm_content, detection_count=len(context.detections))
+        generated_at = datetime.now(UTC)
+        result = AiAnalysis(
+            status="ready",
+            reason=None,
+            summary=processed.summary,
+            detections=processed.detections,
+            recommendation=processed.recommendation,
+            caveats=processed.caveats,
+            model=model_name,
+            generated_at=generated_at,
+        )
+        logger.info(
+            "ai_analysis status=%s reason=%s latency_ms=%s model=%s",
+            result.status,
+            result.reason,
+            latency_ms,
+            model_name,
+        )
+        return result
