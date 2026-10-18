@@ -851,9 +851,9 @@ def test_post_analyses_default_model_id_on_detail_list_and_stats(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["model_id"] == "two-stage-pt"
+    assert body["model_id"] == "yolo-convnext-balanced"
     assert_model_id_on_detail_list_and_stats(
-        client, headers, body["id"], "two-stage-pt"
+        client, headers, body["id"], "yolo-convnext-balanced"
     )
 
 

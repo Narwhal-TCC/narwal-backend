@@ -14,7 +14,7 @@ from app.schemas.analysis import (
     ReviewStatus,
 )
 from app.services.detection_adapter import suppress_overlapping
-from app.services.model_registry import DEFAULT_MODEL_ID
+from app.services.model_registry import LEGACY_DEFAULT_MODEL_ID
 
 VALID_PRIMARY_CLASSES = frozenset({"MILCO", "NOMBO"})
 VALID_REVIEW_STATUSES = frozenset({"pending", "confirmed", "false_positive"})
@@ -157,7 +157,7 @@ class HistoryService:
     def _record_model_id(record: dict) -> str:
         value = record.get("model_id")
         if value is None:
-            return DEFAULT_MODEL_ID
+            return LEGACY_DEFAULT_MODEL_ID
         return value
 
     def _to_summary(self, record: dict) -> AnalysisSummary:

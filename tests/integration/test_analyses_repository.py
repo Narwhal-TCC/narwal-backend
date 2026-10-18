@@ -202,13 +202,13 @@ def test_image_s3_key_persisted_without_blob_column(repository):
     assert "image_blob" not in columns
 
 
-def test_put_get_round_trips_model_id_two_stage_pt(repository):
+def test_put_get_round_trips_default_model_id_balanced(repository):
     repo, _ = repository
     _put(repo, "an-model", "org-1")
 
     record = repo.get_analysis("org-1", "an-model")
 
-    assert record["model_id"] == "two-stage-pt"
+    assert record["model_id"] == "yolo-convnext-balanced"
 
 
 def test_null_model_id_in_sql_reads_back_as_two_stage_pt():

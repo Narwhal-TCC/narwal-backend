@@ -7,7 +7,7 @@ from ulid import ULID
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError
 from app.repositories.metadata_db import connect
-from app.services.model_registry import DEFAULT_MODEL_ID
+from app.services.model_registry import DEFAULT_MODEL_ID, LEGACY_DEFAULT_MODEL_ID
 
 DEFAULT_LIST_LIMIT = 50
 
@@ -42,7 +42,7 @@ def _to_record(row: sqlite3.Row) -> dict:
         "image_content_type": row["image_content_type"],
         "created_at": row["created_at"],
         "inference_ms": int(inference_ms) if inference_ms is not None else None,
-        "model_id": row["model_id"] or DEFAULT_MODEL_ID,
+        "model_id": row["model_id"] or LEGACY_DEFAULT_MODEL_ID,
     }
 
 

@@ -12,7 +12,12 @@ def list_registered_models(
 ) -> dict:
     return {
         "models": [
-            {"id": entry.id, "label": entry.label, "is_default": entry.is_default}
+            {
+                "id": entry.id,
+                "label": entry.label,
+                "description": entry.description,
+                "is_default": entry.is_default,
+            }
             for entry in list_models()
         ]
     }

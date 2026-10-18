@@ -14,10 +14,23 @@ from app.repositories import metadata_db
 EXPECTED_CATALOG = {
     "models": [
         {
+            "id": "yolo-convnext-balanced",
+            "label": "YOLO + ConvNeXt (equilibrado)",
+            "description": "53 de 75 minas no teste, 11 falsos alarmes",
+            "is_default": True,
+        },
+        {
+            "id": "yolo-convnext-recall",
+            "label": "YOLO + ConvNeXt (recall)",
+            "description": "58 de 75 minas no teste, 25 falsos alarmes",
+            "is_default": False,
+        },
+        {
             "id": "two-stage-pt",
             "label": "RetinaNet + fusão (PyTorch)",
-            "is_default": True,
-        }
+            "description": "36 de 75 minas no teste, 7 falsos alarmes",
+            "is_default": False,
+        },
     ]
 }
 

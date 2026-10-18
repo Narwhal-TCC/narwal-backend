@@ -1,24 +1,41 @@
 import pytest
 
 from app.core.errors import UnknownModelError
-from app.services.model_registry import REGISTRY, list_models, resolve_model_id
+from app.services.model_registry import (
+    DEFAULT_MODEL_ID,
+    REGISTRY,
+    list_models,
+    resolve_model_id,
+)
 
 
-def test_registry_has_single_two_stage_entry():
+def test_registry_lists_three_models_in_catalog_order():
     models = list_models()
-    assert len(models) == 1
-    entry = models[0]
-    assert entry.id == "two-stage-pt"
-    assert entry.label == "RetinaNet + fusão (PyTorch)"
-    assert entry.is_default is True
-    assert REGISTRY[0].id == "two-stage-pt"
+    assert len(models) == 3
+    assert [entry.id for entry in models] == [
+        "yolo-convnext-balanced",
+        "yolo-convnext-recall",
+        "two-stage-pt",
+    ]
+    balanced = models[0]
+    assert balanced.label == "YOLO + ConvNeXt (equilibrado)"
+    assert balanced.description == "53 de 75 minas no teste, 11 falsos alarmes"
+    assert balanced.is_default is True
+    assert sum(1 for entry in models if entry.is_default) == 1
+    assert REGISTRY[0].id == "yolo-convnext-balanced"
+
+
+def test_default_model_id_is_balanced_pipeline():
+    assert DEFAULT_MODEL_ID == "yolo-convnext-balanced"
 
 
 @pytest.mark.parametrize(
     "raw,expected",
     [
-        (None, "two-stage-pt"),
-        ("", "two-stage-pt"),
+        (None, "yolo-convnext-balanced"),
+        ("", "yolo-convnext-balanced"),
+        ("yolo-convnext-balanced", "yolo-convnext-balanced"),
+        ("yolo-convnext-recall", "yolo-convnext-recall"),
         ("two-stage-pt", "two-stage-pt"),
     ],
 )

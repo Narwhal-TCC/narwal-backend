@@ -420,7 +420,7 @@ def test_inference_timeout_returns_timeout_error_without_success_row():
 
 
 @pytest.mark.parametrize("model_id", [None, ""])
-def test_analyze_omitted_or_empty_model_id_stores_two_stage_pt(model_id):
+def test_analyze_omitted_or_empty_model_id_stores_balanced_pipeline(model_id):
     repository = FakeAnalysisRepository()
     service = build_service(repository=repository)
 
@@ -432,8 +432,8 @@ def test_analyze_omitted_or_empty_model_id_stores_two_stage_pt(model_id):
         model_id=model_id,
     )
 
-    assert result.model_id == "two-stage-pt"
-    assert repository.puts[0]["model_id"] == "two-stage-pt"
+    assert result.model_id == "yolo-convnext-balanced"
+    assert repository.puts[0]["model_id"] == "yolo-convnext-balanced"
 
 
 def test_analyze_explicit_two_stage_pt_stores_two_stage_pt():
