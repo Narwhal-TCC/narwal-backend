@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from app.services.yolo_convnext import YoloConvnextGateway, YoloConvnextWeights
+from app.services.yolo_convnext import YoloConvnextGateway
 
 
 class NoLoadWeights:

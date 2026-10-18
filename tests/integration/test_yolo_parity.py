@@ -35,7 +35,9 @@ BALANCED_CONFIG = (
 
 
 def _weights_ready() -> bool:
-    return NOTEBOOK_PIPELINE.is_file() and all((WEIGHTS_DIR / name).is_file() for name in WEIGHT_FILES)
+    if not NOTEBOOK_PIPELINE.is_file():
+        return False
+    return all((WEIGHTS_DIR / name).is_file() for name in WEIGHT_FILES)
 
 
 def _load_notebook_pipeline():
@@ -65,9 +67,15 @@ def test_api_gateway_matches_notebook_pipeline_on_fixture(tmp_path):
             mapping = {
                 "s3://narwal/models/v2/G5_best.pt": WEIGHTS_DIR / "G5_best.pt",
                 "s3://narwal/models/v2/yolo_a_best.pt": WEIGHTS_DIR / "yolo_a_best.pt",
-                "s3://narwal/models/v2/convnext_pico_224_s42.pt": WEIGHTS_DIR / "convnext_pico_224_s42.pt",
-                "s3://narwal/models/v2/convnext_pico_224_s43.pt": WEIGHTS_DIR / "convnext_pico_224_s43.pt",
-                "s3://narwal/models/v2/convnext_pico_224_s44.pt": WEIGHTS_DIR / "convnext_pico_224_s44.pt",
+                "s3://narwal/models/v2/convnext_pico_224_s42.pt": (
+                    WEIGHTS_DIR / "convnext_pico_224_s42.pt"
+                ),
+                "s3://narwal/models/v2/convnext_pico_224_s43.pt": (
+                    WEIGHTS_DIR / "convnext_pico_224_s43.pt"
+                ),
+                "s3://narwal/models/v2/convnext_pico_224_s44.pt": (
+                    WEIGHTS_DIR / "convnext_pico_224_s44.pt"
+                ),
             }
             assert s3_uri in mapping
             return mapping[s3_uri].read_bytes()

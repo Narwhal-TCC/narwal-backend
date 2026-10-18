@@ -12,12 +12,12 @@ from app.api.deps import (
     get_model_gateway,
     get_object_store,
 )
-from tests.conftest import gateway_pool_for
 from app.core.config import get_settings
 from app.main import app
 from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
 from app.services.model_gateway import FakeModelGateway
+from tests.conftest import gateway_pool_for
 
 
 def png_bytes() -> bytes:

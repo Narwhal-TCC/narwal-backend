@@ -17,7 +17,6 @@ from app.api.deps import (
     get_object_store,
     get_user_repository,
 )
-from app.services.gateway_pool import GatewayPool
 from app.core.config import get_settings
 from app.core.errors import ModelUnavailableError
 from app.core.security import create_access_token, hash_password
@@ -26,6 +25,7 @@ from app.repositories.analyses import AnalysisRepository
 from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
 from app.services.analyze import AnalyzeService
+from app.services.gateway_pool import GatewayPool
 from app.services.history import HistoryService
 
 BUCKET = "narwal-routes-test"

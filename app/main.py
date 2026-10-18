@@ -5,14 +5,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from starlette.concurrency import run_in_threadpool
 
-from app.api.deps import get_model_gateway
+from app.api.deps import get_gateway_pool
 from app.api.routes.analyses import router as analyses_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.models import router as models_router
-from app.bootstrap.seed import run_seed
+from app.bootstrap.seed import run_seed, seed_v2_model_artifacts
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError, register_error_handlers
 from app.repositories.s3_store import S3ObjectStore
+from app.services.model_registry import DEFAULT_MODEL_ID
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ def bootstrap() -> None:
             settings.classifier_local_path, settings.classifier_s3_uri
         ):
             logger.info("Uploaded local classifier artifact to object storage")
+        seed_v2_model_artifacts(store)
     except Exception:
         logger.warning("Could not seed model artifacts to object storage", exc_info=True)
     try:
@@ -43,7 +45,7 @@ def bootstrap() -> None:
     except Exception:
         logger.warning("Could not seed organizations and users", exc_info=True)
     try:
-        get_model_gateway().ensure_model_loaded()
+        get_gateway_pool().get(DEFAULT_MODEL_ID).ensure_model_loaded()
     except Exception:
         logger.warning("Model not preloaded; the first analyze request will retry", exc_info=True)
 

@@ -9,6 +9,7 @@ from typing import Any
 from app.core.config import convnext_s3_uri_list, get_settings
 from app.core.errors import ModelUnavailableError
 from app.repositories.s3_store import S3ObjectStore
+
 YoloBuilder = Callable[[bytes], Any]
 ClassifierBuilder = Callable[[bytes], tuple[Any, dict]]
 
@@ -82,7 +83,9 @@ def build_convnext_classifier(payload: bytes) -> tuple[Any, dict]:
                 )
 
         def forward(self, x: Any) -> Any:
-            parts = [b((x - mu) / sd) for b, (mu, sd) in zip(self.backbone, self.stats, strict=True)]
+            parts = [
+                b((x - mu) / sd) for b, (mu, sd) in zip(self.backbone, self.stats, strict=True)
+            ]
             return self.head(torch.cat(parts, 1))
 
     model = Net()
@@ -214,7 +217,11 @@ class YoloConvnextGateway:
         else:
             listas = self._run_yolo_detectors(image)
 
-        listas = [nms(np.asarray(boxes, dtype=np.float64), cfg["iou_nms"]) for boxes, cfg in zip(listas, (G5_DETECTOR, YOLO_A_DETECTOR), strict=True)]
+        detector_cfgs = (G5_DETECTOR, YOLO_A_DETECTOR)
+        listas = [
+            nms(np.asarray(boxes, dtype=np.float64), cfg["iou_nms"])
+            for boxes, cfg in zip(listas, detector_cfgs, strict=True)
+        ]
         fused = nms(wbf(listas, iou_thr=WBF_IOU), POST_WBF_NMS_IOU)
         if len(fused):
             fused = fused[fused[:, 4] >= self.fusion_conf]
@@ -258,7 +265,7 @@ class YoloConvnextGateway:
             )
         return results
 
-    def _run_yolo_detectors(self, image: Image.Image) -> list[np.ndarray]:
+    def _run_yolo_detectors(self, image: Any) -> list[Any]:
         import numpy as np
 
         assert self.weights.yolo_g5 is not None and self.weights.yolo_a is not None
@@ -295,6 +302,7 @@ class YoloConvnextGateway:
         assert self.weights.classifiers
         with torch.inference_mode():
             stacked = [
-                torch.softmax(model(batch), dim=1).cpu().numpy() for model in self.weights.classifiers
+                torch.softmax(model(batch), dim=1).cpu().numpy()
+                for model in self.weights.classifiers
             ]
         return np.mean(stacked, axis=0)

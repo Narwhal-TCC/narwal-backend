@@ -11,8 +11,8 @@ from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
 from app.services.analyze import AnalyzeService
 from app.services.auth import AuthService
-from app.services.history import HistoryService
 from app.services.gateway_pool import GatewayPool
+from app.services.history import HistoryService
 from app.services.model_gateway import ModelGateway
 
 bearer_scheme = HTTPBearer(auto_error=False)

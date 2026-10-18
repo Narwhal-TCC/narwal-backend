@@ -11,11 +11,11 @@ from app.api.deps import (
     get_object_store,
     get_user_repository,
 )
-from app.services.gateway_pool import GatewayPool
 from app.bootstrap.seed import run_seed
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError
 from app.main import app
+from app.services.gateway_pool import GatewayPool
 from app.services.model_gateway import FakeModelGateway
 
 logger = logging.getLogger("app.main")
