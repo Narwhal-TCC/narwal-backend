@@ -59,11 +59,65 @@ class Settings(BaseSettings):
         ),
     )
 
+    # YOLO + ConvNeXt pipeline (v2 weights)
+    yolo_g5_s3_uri: str = Field(
+        default="s3://narwal/models/v2/G5_best.pt",
+        alias="YOLO_G5_S3_URI",
+    )
+    yolo_a_s3_uri: str = Field(
+        default="s3://narwal/models/v2/yolo_a_best.pt",
+        alias="YOLO_A_S3_URI",
+    )
+    convnext_s3_uris: str = Field(
+        default=(
+            "s3://narwal/models/v2/convnext_pico_224_s42.pt,"
+            "s3://narwal/models/v2/convnext_pico_224_s43.pt,"
+            "s3://narwal/models/v2/convnext_pico_224_s44.pt"
+        ),
+        alias="CONVNEXT_S3_URIS",
+    )
+    yolo_g5_local_path: str | None = Field(
+        default="data/models/v2/G5_best.pt",
+        alias="YOLO_G5_LOCAL_PATH",
+    )
+    yolo_a_local_path: str | None = Field(
+        default="data/models/v2/yolo_a_best.pt",
+        alias="YOLO_A_LOCAL_PATH",
+    )
+    convnext_local_paths: str | None = Field(
+        default=(
+            "data/models/v2/convnext_pico_224_s42.pt,"
+            "data/models/v2/convnext_pico_224_s43.pt,"
+            "data/models/v2/convnext_pico_224_s44.pt"
+        ),
+        alias="CONVNEXT_LOCAL_PATHS",
+    )
+
     # Analysis list / metadata bounds
     list_scan_cap: int = Field(default=500, alias="LIST_SCAN_CAP")
     max_metadata_length: int = Field(default=256, alias="MAX_METADATA_LENGTH")
 
 
+def _split_csv(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def convnext_s3_uri_list(settings: Settings | None = None) -> list[str]:
+    resolved = settings or get_settings()
+    uris = _split_csv(resolved.convnext_s3_uris)
+    if len(uris) != 3:
+        raise ValueError("CONVNEXT_S3_URIS must list exactly three classifier URIs")
+    return uris
+
+
+def convnext_local_path_list(settings: Settings | None = None) -> list[str]:
+    resolved = settings or get_settings()
+    raw = resolved.convnext_local_paths
+    if raw is None or raw == "":
+        return []
+    return _split_csv(raw)

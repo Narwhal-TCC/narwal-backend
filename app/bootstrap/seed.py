@@ -1,6 +1,23 @@
-from app.core.config import get_settings
+from app.core.config import convnext_local_path_list, convnext_s3_uri_list, get_settings
 from app.core.security import hash_password
+from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
+
+
+def seed_v2_model_artifacts(store: S3ObjectStore | None = None) -> None:
+    """Upload local v2 YOLO / ConvNeXt weights when absent from object storage."""
+    settings = get_settings()
+    s3 = store or S3ObjectStore()
+    pairs: list[tuple[str | None, str]] = [
+        (settings.yolo_g5_local_path, settings.yolo_g5_s3_uri),
+        (settings.yolo_a_local_path, settings.yolo_a_s3_uri),
+    ]
+    local_paths = convnext_local_path_list(settings)
+    s3_uris = convnext_s3_uri_list(settings)
+    pairs.extend(zip(local_paths, s3_uris, strict=True))
+    for local_path, s3_uri in pairs:
+        if local_path and s3.seed_model_if_missing(local_path, s3_uri):
+            continue
 
 
 def run_seed(repository: UserRepository | None = None) -> None:
