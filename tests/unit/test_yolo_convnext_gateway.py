@@ -64,6 +64,17 @@ def test_fusion_conf_filters_low_score_boxes():
     assert balanced.predict(np.zeros((80, 100, 3), dtype=np.uint8)) == []
 
 
+def test_detector_score_equals_fused_wbf_score_within_unit_interval():
+    lists = [_box(0.3), _box(0.3)]
+    gateway = _gateway(0.2, lists, lambda _batch: np.array([[0.1, 0.9]]))
+    rows = gateway.predict(np.zeros((80, 100, 3), dtype=np.uint8))
+
+    assert len(rows) == 1
+    detector_score = float(rows[0]["detector_score"])
+    assert 0.0 <= detector_score <= 1.0
+    assert detector_score == pytest.approx(0.3)
+
+
 def test_empty_detector_output_returns_no_rows():
     gateway = _gateway(
         0.4,
