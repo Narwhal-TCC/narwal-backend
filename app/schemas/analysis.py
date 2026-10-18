@@ -6,6 +6,30 @@ from pydantic import BaseModel, Field
 DetectionLabel = Literal["MILCO", "NOMBO"]
 PrimaryClass = Literal["MILCO", "NOMBO"]
 ReviewStatus = Literal["pending", "confirmed", "false_positive"]
+AiStatus = Literal["ready", "unavailable"]
+AiReason = Literal[
+    "disabled",
+    "timeout",
+    "provider_error",
+    "rate_limited",
+    "invalid_response",
+]
+
+
+class AiDetectionNote(BaseModel):
+    index: int
+    note: str
+
+
+class AiAnalysis(BaseModel):
+    status: AiStatus
+    reason: AiReason | None = None
+    summary: str | None = None
+    detections: list[AiDetectionNote] = Field(default_factory=list)
+    recommendation: str | None = None
+    caveats: list[str] = Field(default_factory=list)
+    model: str | None = None
+    generated_at: datetime | None = None
 
 
 class Detection(BaseModel):
@@ -38,6 +62,7 @@ class AnalysisResult(BaseModel):
     created_at: datetime
     inference_ms: int | None = None
     model_id: str = "two-stage-pt"
+    ai_analysis: AiAnalysis | None = None
 
 
 class AnalysisSummary(BaseModel):
