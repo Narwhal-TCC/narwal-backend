@@ -72,7 +72,8 @@ def test_analysis_result_includes_optional_ai_analysis():
 
 
 def test_analysis_summary_has_no_ai_analysis_field():
-    summary = AnalysisSummary(
+    assert "ai_analysis" not in AnalysisSummary.model_fields
+    AnalysisSummary(
         id="01JABCDEF",
         org_id="org-1",
         user_id="user-1",
@@ -80,4 +81,3 @@ def test_analysis_summary_has_no_ai_analysis_field():
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
         detection_count=0,
     )
-    assert "ai_analysis" not in AnalysisSummary.model_fields

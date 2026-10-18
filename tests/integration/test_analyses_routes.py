@@ -17,18 +17,23 @@ from app.api.deps import (
     get_object_store,
     get_user_repository,
 )
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.errors import ModelUnavailableError
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.repositories.analyses import AnalysisRepository
 from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
+from app.services.ai_analyst import AiAnalyst
 from app.services.analyze import AnalyzeService
 from app.services.gateway_pool import GatewayPool
 from app.services.history import HistoryService
 
 BUCKET = "narwal-routes-test"
+
+
+def _disabled_ai_analyst() -> AiAnalyst:
+    return AiAnalyst(settings=Settings(_env_file=None, llm_api_key=""))
 
 
 def png_bytes(width: int = 640, height: int = 480) -> bytes:
@@ -122,6 +127,7 @@ def analyses_client(monkeypatch, tmp_path: Path):
             object_store=object_store,
             repository=analyses,
             timeout_seconds=5,
+            ai_analyst=_disabled_ai_analyst(),
         )
         app.dependency_overrides[get_history_service] = lambda: HistoryService(
             repository=analyses,
@@ -593,6 +599,7 @@ def _wire_analyses_app(db_path: Path, gateway: ConfigurableModelGateway, s3) -> 
         object_store=object_store,
         repository=analyses,
         timeout_seconds=5,
+        ai_analyst=_disabled_ai_analyst(),
     )
     app.dependency_overrides[get_history_service] = lambda: HistoryService(
         repository=analyses,
@@ -714,6 +721,7 @@ def _corrupt_analyses_client(monkeypatch, tmp_path: Path):
             object_store=object_store,
             repository=analyses,
             timeout_seconds=5,
+            ai_analyst=_disabled_ai_analyst(),
         )
         app.dependency_overrides[get_history_service] = lambda: HistoryService(
             repository=analyses,
@@ -828,6 +836,7 @@ def test_failed_insert_returns_503_and_leaves_list_unchanged(
             object_store=object_store,
             repository=analyses,
             timeout_seconds=5,
+            ai_analyst=_disabled_ai_analyst(),
         )
         app.dependency_overrides[get_history_service] = lambda: HistoryService(
             repository=analyses,
@@ -988,6 +997,7 @@ def test_post_analyses_routes_each_model_id_to_its_gateway(monkeypatch, tmp_path
             object_store=object_store,
             repository=analyses,
             timeout_seconds=5,
+            ai_analyst=_disabled_ai_analyst(),
         )
         with TestClient(app) as client:
             headers = auth_headers(client, "operator")

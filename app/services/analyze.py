@@ -13,6 +13,7 @@ from app.core.errors import InferenceTimeoutError, InvalidImageError, StorageErr
 from app.repositories.analyses import AnalysisRepository, new_analysis_id
 from app.repositories.s3_store import DEFAULT_PRESIGN_EXPIRES_SECONDS, S3ObjectStore
 from app.schemas.analysis import AnalysisResult
+from app.services.ai_analyst import AiAnalyst, AnalystContext
 from app.services.detection_adapter import to_detections
 from app.services.gateway_pool import GatewayPool
 from app.services.model_registry import resolve_model_id
@@ -30,11 +31,13 @@ class AnalyzeService:
         object_store: S3ObjectStore | None = None,
         repository: AnalysisRepository | None = None,
         timeout_seconds: int | None = None,
+        ai_analyst: AiAnalyst | None = None,
     ) -> None:
         self.gateway_pool = gateway_pool
         self.object_store = object_store or S3ObjectStore()
         self.repository = repository or AnalysisRepository()
         self.timeout_seconds = timeout_seconds or get_settings().inference_timeout_seconds
+        self.ai_analyst = ai_analyst or AiAnalyst()
 
     def analyze_image(
         self,
@@ -67,6 +70,16 @@ class AnalyzeService:
         detections = to_detections(raw, image_width=width, image_height=height)
         primary_class = compute_primary_class(detections)
         milco_detection_count = count_milco(detections)
+        ai_analysis = self.ai_analyst.analyze(
+            AnalystContext(
+                model_id=resolved_model_id,
+                image_width=width,
+                image_height=height,
+                detections=detections,
+                primary_class=primary_class,
+                milco_detection_count=milco_detection_count,
+            )
+        )
 
         analysis_id = new_analysis_id()
         created_at = datetime.now(UTC)
@@ -100,6 +113,7 @@ class AnalyzeService:
             created_at=created_at.isoformat(),
             inference_ms=inference_ms,
             model_id=resolved_model_id,
+            ai_analysis=ai_analysis,
         )
         return AnalysisResult(
             id=analysis_id,
@@ -126,6 +140,7 @@ class AnalyzeService:
             created_at=created_at,
             inference_ms=inference_ms,
             model_id=resolved_model_id,
+            ai_analysis=ai_analysis,
         )
 
     def _validate_metadata(

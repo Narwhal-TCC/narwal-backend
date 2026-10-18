@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from app.core.config import Settings
 from app.core.errors import (
     InferenceTimeoutError,
     InvalidImageError,
@@ -15,6 +16,7 @@ from app.core.errors import (
     UnknownModelError,
     ValidationError,
 )
+from app.services.ai_analyst import AiAnalyst
 from app.services.analyze import MAX_IMAGE_BYTES, AnalyzeService
 from app.services.gateway_pool import GatewayPool
 from app.services.model_gateway import FakeModelGateway
@@ -111,13 +113,25 @@ def _pool_for(gateway: FakeModelGateway) -> GatewayPool:
     )
 
 
-def build_service(gateway=None, store=None, repository=None, timeout_seconds=60, gateway_pool=None):
+def _disabled_ai_analyst() -> AiAnalyst:
+    return AiAnalyst(settings=Settings(_env_file=None, llm_api_key=""))
+
+
+def build_service(
+    gateway=None,
+    store=None,
+    repository=None,
+    timeout_seconds=60,
+    gateway_pool=None,
+    ai_analyst=None,
+):
     pool = gateway_pool or _pool_for(gateway or FakeModelGateway())
     return AnalyzeService(
         gateway_pool=pool,
         object_store=store or FakeObjectStore(),
         repository=repository or FakeAnalysisRepository(),
         timeout_seconds=timeout_seconds,
+        ai_analyst=ai_analyst or _disabled_ai_analyst(),
     )
 
 

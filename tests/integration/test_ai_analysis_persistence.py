@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.repositories.analyses import AnalysisRepository, _to_record
+from app.repositories.analyses import AnalysisRepository
 from app.repositories.metadata_db import connect
 from app.schemas.analysis import AiAnalysis, AiDetectionNote
 from app.services.history import HistoryService

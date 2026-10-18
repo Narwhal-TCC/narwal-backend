@@ -9,6 +9,7 @@ from app.core.security import decode_access_token
 from app.repositories.analyses import AnalysisRepository
 from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
+from app.services.ai_analyst import AiAnalyst
 from app.services.analyze import AnalyzeService
 from app.services.auth import AuthService
 from app.services.gateway_pool import GatewayPool
@@ -63,6 +64,11 @@ def get_gateway_pool() -> GatewayPool:
 
 
 @lru_cache
+def get_ai_analyst() -> AiAnalyst:
+    return AiAnalyst()
+
+
+@lru_cache
 def get_model_gateway() -> ModelGateway:
     # Back-compat for tests that override a single gateway via the default pipeline id.
     return get_gateway_pool().get("yolo-convnext-balanced")
@@ -72,11 +78,13 @@ def get_analyze_service(
     gateway_pool: GatewayPool = Depends(get_gateway_pool),
     object_store: S3ObjectStore = Depends(get_object_store),
     repository: AnalysisRepository = Depends(get_analysis_repository),
+    ai_analyst: AiAnalyst = Depends(get_ai_analyst),
 ) -> AnalyzeService:
     return AnalyzeService(
         gateway_pool=gateway_pool,
         object_store=object_store,
         repository=repository,
+        ai_analyst=ai_analyst,
     )
 
 

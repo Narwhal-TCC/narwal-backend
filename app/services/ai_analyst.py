@@ -38,13 +38,19 @@ DETECTION_PAYLOAD_KEYS = frozenset(
     {"x1", "y1", "x2", "y2", "label", "confidence", "detector_score"}
 )
 
-SYSTEM_PROMPT = """Você é um assistente técnico para operadores de detecção de minas em imagens de sonar.
-Responda SOMENTE com um objeto JSON válido (sem markdown) no formato:
-{"summary": str, "detections": [{"index": int, "note": str}], "recommendation": str, "caveats": [str]}
-Use português do Brasil, tom factual e objetivo. Não invente detecções que não estejam no JSON de entrada.
-Mencione que a análise é apoio à decisão e não substitui a avaliação do operador.
-Para cada item em detections, index é o índice 0-based da caixa correspondente na lista de detecções fornecida.
-"""
+SYSTEM_PROMPT = (
+    "Você é um assistente técnico para operadores de detecção de minas "
+    "em imagens de sonar.\n"
+    "Responda SOMENTE com um objeto JSON válido (sem markdown) no formato:\n"
+    '{"summary": str, "detections": [{"index": int, "note": str}], '
+    '"recommendation": str, "caveats": [str]}\n'
+    "Use português do Brasil, tom factual e objetivo. "
+    "Não invente detecções que não estejam no JSON de entrada.\n"
+    "Mencione que a análise é apoio à decisão e não substitui a avaliação "
+    "do operador.\n"
+    "Para cada item em detections, index é o índice 0-based da caixa "
+    "correspondente na lista de detecções fornecida.\n"
+)
 
 
 class LlmAnalysisContent(BaseModel):
