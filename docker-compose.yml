@@ -39,6 +39,9 @@ services:
 
   app:
     build: .
+    env_file:
+      - path: .env
+        required: false
     ports:
       - "8080:8080"
     environment:
@@ -46,7 +49,8 @@ services:
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
       S3_ENDPOINT_URL: http://minio:9000
-      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      # Presigned image URLs must use a host the browser can reach (not minio:9000 or a LAN IP from .env).
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
       S3_FORCE_PATH_STYLE: "true"
       S3_BUCKET: narwal
       SQLITE_PATH: /app/db/narwal.db

@@ -18,7 +18,15 @@ def _import_ultralytics_yolo():
     try:
         from ultralytics import YOLO
     except ImportError as exc:
-        raise ModelUnavailableError("YOLO runtime is not installed") from exc
+        detail = str(exc.__cause__ or exc)
+        if "libxcb" in detail or "libGL" in detail or "cv2" in str(exc).lower():
+            message = (
+                "OpenCV could not load native libraries "
+                "(Docker image needs libxcb1/libgl1; see Dockerfile)"
+            )
+        else:
+            message = "YOLO runtime is not installed"
+        raise ModelUnavailableError(message) from exc
     return YOLO
 
 
