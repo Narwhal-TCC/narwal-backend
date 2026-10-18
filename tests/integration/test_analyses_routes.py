@@ -11,11 +11,13 @@ from PIL import Image
 
 from app.api.deps import (
     get_analyze_service,
+    get_gateway_pool,
     get_history_service,
     get_model_gateway,
     get_object_store,
     get_user_repository,
 )
+from app.services.gateway_pool import GatewayPool
 from app.core.config import get_settings
 from app.core.errors import ModelUnavailableError
 from app.core.security import create_access_token, hash_password
@@ -53,9 +55,11 @@ def _stage(
 
 
 class ConfigurableModelGateway:
-    def __init__(self) -> None:
+    def __init__(self, marker: str | None = None) -> None:
         self.raw_output: list = [_stage()]
         self.unavailable = False
+        self.marker = marker
+        self.predict_calls = 0
 
     def ensure_model_loaded(self):
         if self.unavailable:
@@ -64,7 +68,18 @@ class ConfigurableModelGateway:
 
     def predict(self, image_array):
         self.ensure_model_loaded()
+        self.predict_calls += 1
         return [dict(row) for row in self.raw_output]
+
+
+def _pool_for_gateway(gateway: ConfigurableModelGateway) -> GatewayPool:
+    return GatewayPool(
+        gateway_factories={
+            "yolo-convnext-balanced": lambda g=gateway: g,
+            "yolo-convnext-recall": lambda g=gateway: g,
+            "two-stage-pt": lambda g=gateway: g,
+        }
+    )
 
 
 @pytest.fixture
@@ -97,11 +112,13 @@ def analyses_client(monkeypatch, tmp_path: Path):
         object_store.ensure_bucket()
         analyses = AnalysisRepository(str(db_path))
         gateway = ConfigurableModelGateway()
+        pool = _pool_for_gateway(gateway)
 
         app.dependency_overrides[get_user_repository] = lambda: users
+        app.dependency_overrides[get_gateway_pool] = lambda: pool
         app.dependency_overrides[get_model_gateway] = lambda: gateway
         app.dependency_overrides[get_analyze_service] = lambda: AnalyzeService(
-            model_gateway=gateway,
+            gateway_pool=pool,
             object_store=object_store,
             repository=analyses,
             timeout_seconds=5,
@@ -567,10 +584,12 @@ def _wire_analyses_app(db_path: Path, gateway: ConfigurableModelGateway, s3) -> 
     object_store = S3ObjectStore(client=s3, bucket=BUCKET)
     object_store.ensure_bucket()
     analyses = AnalysisRepository(str(db_path))
+    pool = _pool_for_gateway(gateway)
     app.dependency_overrides[get_user_repository] = lambda: users
+    app.dependency_overrides[get_gateway_pool] = lambda: pool
     app.dependency_overrides[get_model_gateway] = lambda: gateway
     app.dependency_overrides[get_analyze_service] = lambda: AnalyzeService(
-        model_gateway=gateway,
+        gateway_pool=pool,
         object_store=object_store,
         repository=analyses,
         timeout_seconds=5,
@@ -682,14 +701,16 @@ def _corrupt_analyses_client(monkeypatch, tmp_path: Path):
     users = UserRepository(str(corrupt))
     analyses = AnalysisRepository(str(corrupt))
     gateway = ConfigurableModelGateway()
+    pool = _pool_for_gateway(gateway)
     with mock_aws():
         s3 = boto3.client("s3", region_name="us-east-1")
         object_store = S3ObjectStore(client=s3, bucket=BUCKET)
         object_store.ensure_bucket()
         app.dependency_overrides[get_user_repository] = lambda: users
+        app.dependency_overrides[get_gateway_pool] = lambda: pool
         app.dependency_overrides[get_model_gateway] = lambda: gateway
         app.dependency_overrides[get_analyze_service] = lambda: AnalyzeService(
-            model_gateway=gateway,
+            gateway_pool=pool,
             object_store=object_store,
             repository=analyses,
             timeout_seconds=5,
@@ -798,10 +819,12 @@ def test_failed_insert_returns_503_and_leaves_list_unchanged(
         s3 = boto3.client("s3", region_name="us-east-1")
         object_store = S3ObjectStore(client=s3, bucket=BUCKET)
         object_store.ensure_bucket()
+        pool = _pool_for_gateway(gateway)
         app.dependency_overrides[get_user_repository] = lambda: users
+        app.dependency_overrides[get_gateway_pool] = lambda: pool
         app.dependency_overrides[get_model_gateway] = lambda: gateway
         app.dependency_overrides[get_analyze_service] = lambda: AnalyzeService(
-            model_gateway=gateway,
+            gateway_pool=pool,
             object_store=object_store,
             repository=analyses,
             timeout_seconds=5,
@@ -927,3 +950,56 @@ def test_post_analyses_model_unavailable_leaves_list_unchanged(analyses_client):
     assert response.json()["code"] == "MODEL_UNAVAILABLE"
     after = client.get("/analyses", headers=headers).json()["items"]
     assert after == before
+
+
+def test_post_analyses_routes_each_model_id_to_its_gateway(monkeypatch, tmp_path: Path):
+    db_path = tmp_path / "routing.db"
+    monkeypatch.setenv("SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("JWT_SECRET", "integration-test-secret-at-least-32-bytes")
+    monkeypatch.setenv("S3_BUCKET", BUCKET)
+    monkeypatch.delenv("S3_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("S3_PUBLIC_ENDPOINT", raising=False)
+    get_settings.cache_clear()
+    get_object_store.cache_clear()
+
+    balanced = ConfigurableModelGateway(marker="balanced")
+    recall = ConfigurableModelGateway(marker="recall")
+    two_stage = ConfigurableModelGateway(marker="two-stage")
+    pool = GatewayPool(
+        gateway_factories={
+            "yolo-convnext-balanced": lambda g=balanced: g,
+            "yolo-convnext-recall": lambda g=recall: g,
+            "two-stage-pt": lambda g=two_stage: g,
+        }
+    )
+
+    with mock_aws():
+        users = UserRepository(str(db_path))
+        users.put_org("org-1", "Sonar Team")
+        users.put_user("user-1", "org-1", "operator", hash_password("pw"), "member")
+        s3 = boto3.client("s3", region_name="us-east-1")
+        object_store = S3ObjectStore(client=s3, bucket=BUCKET)
+        object_store.ensure_bucket()
+        analyses = AnalysisRepository(str(db_path))
+        app.dependency_overrides[get_user_repository] = lambda: users
+        app.dependency_overrides[get_gateway_pool] = lambda: pool
+        app.dependency_overrides[get_analyze_service] = lambda: AnalyzeService(
+            gateway_pool=pool,
+            object_store=object_store,
+            repository=analyses,
+            timeout_seconds=5,
+        )
+        with TestClient(app) as client:
+            headers = auth_headers(client, "operator")
+            for model_id, gateway in (
+                ("yolo-convnext-balanced", balanced),
+                ("yolo-convnext-recall", recall),
+                ("two-stage-pt", two_stage),
+            ):
+                response = post_image(client, headers, png_bytes(), model_id=model_id)
+                assert response.status_code == 200
+                body = response.json()
+                assert body["model_id"] == model_id
+                assert gateway.predict_calls == 1
+        app.dependency_overrides.clear()
+    get_settings.cache_clear()

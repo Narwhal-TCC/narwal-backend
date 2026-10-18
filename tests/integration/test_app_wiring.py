@@ -8,9 +8,11 @@ from PIL import Image
 
 from app.api.deps import (
     get_analysis_repository,
+    get_gateway_pool,
     get_model_gateway,
     get_object_store,
 )
+from tests.conftest import gateway_pool_for
 from app.core.config import get_settings
 from app.main import app
 from app.repositories.s3_store import S3ObjectStore
@@ -27,6 +29,7 @@ def png_bytes() -> bytes:
 def _clear_dependency_caches() -> None:
     get_object_store.cache_clear()
     get_analysis_repository.cache_clear()
+    get_gateway_pool.cache_clear()
     get_model_gateway.cache_clear()
 
 
@@ -46,7 +49,9 @@ def wired_client(monkeypatch, tmp_path):
         s3 = boto3.client("s3", region_name="us-east-1")
         store = S3ObjectStore(client=s3, bucket="wiring-test")
         store.ensure_bucket()
-        app.dependency_overrides[get_model_gateway] = lambda: FakeModelGateway()
+        fake_gateway = FakeModelGateway()
+        app.dependency_overrides[get_gateway_pool] = lambda: gateway_pool_for(fake_gateway)
+        app.dependency_overrides[get_model_gateway] = lambda: fake_gateway
         app.dependency_overrides[get_object_store] = lambda: store
         with TestClient(app) as client:
             yield client

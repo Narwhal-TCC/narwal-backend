@@ -12,7 +12,8 @@ from app.repositories.users import UserRepository
 from app.services.analyze import AnalyzeService
 from app.services.auth import AuthService
 from app.services.history import HistoryService
-from app.services.model_gateway import ModelGateway, TwoStageTorchGateway
+from app.services.gateway_pool import GatewayPool
+from app.services.model_gateway import ModelGateway
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -57,18 +58,23 @@ def get_analysis_repository() -> AnalysisRepository:
 
 
 @lru_cache
+def get_gateway_pool() -> GatewayPool:
+    return GatewayPool(store=get_object_store())
+
+
+@lru_cache
 def get_model_gateway() -> ModelGateway:
-    # Cached so the loaded model stays in process memory across requests.
-    return TwoStageTorchGateway(store=get_object_store())
+    # Back-compat for tests that override a single gateway via the default pipeline id.
+    return get_gateway_pool().get("yolo-convnext-balanced")
 
 
 def get_analyze_service(
-    model_gateway: ModelGateway = Depends(get_model_gateway),
+    gateway_pool: GatewayPool = Depends(get_gateway_pool),
     object_store: S3ObjectStore = Depends(get_object_store),
     repository: AnalysisRepository = Depends(get_analysis_repository),
 ) -> AnalyzeService:
     return AnalyzeService(
-        model_gateway=model_gateway,
+        gateway_pool=gateway_pool,
         object_store=object_store,
         repository=repository,
     )

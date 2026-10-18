@@ -6,10 +6,12 @@ import pytest
 import app.main as main_module
 from app.api.deps import (
     get_analysis_repository,
+    get_gateway_pool,
     get_model_gateway,
     get_object_store,
     get_user_repository,
 )
+from app.services.gateway_pool import GatewayPool
 from app.bootstrap.seed import run_seed
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError
@@ -41,12 +43,27 @@ def production_bootstrap(monkeypatch):
     yield _production_bootstrap
 
 
+def gateway_pool_for(gateway: FakeModelGateway) -> GatewayPool:
+    return GatewayPool(
+        gateway_factories={
+            "yolo-convnext-balanced": lambda g=gateway: g,
+            "yolo-convnext-recall": lambda g=gateway: g,
+            "two-stage-pt": lambda g=gateway: g,
+        }
+    )
+
+
 @pytest.fixture(autouse=True)
 def fake_model_gateway_by_default():
-    app.dependency_overrides[get_model_gateway] = lambda: FakeModelGateway()
+    gateway = FakeModelGateway()
+    app.dependency_overrides[get_gateway_pool] = lambda: gateway_pool_for(gateway)
+    app.dependency_overrides[get_model_gateway] = lambda: gateway
+    get_gateway_pool.cache_clear()
     get_model_gateway.cache_clear()
     yield
+    app.dependency_overrides.pop(get_gateway_pool, None)
     app.dependency_overrides.pop(get_model_gateway, None)
+    get_gateway_pool.cache_clear()
     get_model_gateway.cache_clear()
 
 
@@ -59,12 +76,14 @@ def temp_sqlite_database(monkeypatch, tmp_path):
     get_settings.cache_clear()
     get_analysis_repository.cache_clear()
     get_object_store.cache_clear()
+    get_gateway_pool.cache_clear()
     if hasattr(get_user_repository, "cache_clear"):
         get_user_repository.cache_clear()
     yield
     get_settings.cache_clear()
     get_analysis_repository.cache_clear()
     get_object_store.cache_clear()
+    get_gateway_pool.cache_clear()
     if hasattr(get_user_repository, "cache_clear"):
         get_user_repository.cache_clear()
 

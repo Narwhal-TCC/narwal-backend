@@ -16,6 +16,7 @@ from app.core.errors import (
     ValidationError,
 )
 from app.services.analyze import MAX_IMAGE_BYTES, AnalyzeService
+from app.services.gateway_pool import GatewayPool
 from app.services.model_gateway import FakeModelGateway
 
 
@@ -100,9 +101,20 @@ class HangingModelGateway:
         return []
 
 
-def build_service(gateway=None, store=None, repository=None, timeout_seconds=60):
+def _pool_for(gateway: FakeModelGateway) -> GatewayPool:
+    return GatewayPool(
+        gateway_factories={
+            "yolo-convnext-balanced": lambda g=gateway: g,
+            "yolo-convnext-recall": lambda g=gateway: g,
+            "two-stage-pt": lambda g=gateway: g,
+        }
+    )
+
+
+def build_service(gateway=None, store=None, repository=None, timeout_seconds=60, gateway_pool=None):
+    pool = gateway_pool or _pool_for(gateway or FakeModelGateway())
     return AnalyzeService(
-        model_gateway=gateway or FakeModelGateway(),
+        gateway_pool=pool,
         object_store=store or FakeObjectStore(),
         repository=repository or FakeAnalysisRepository(),
         timeout_seconds=timeout_seconds,

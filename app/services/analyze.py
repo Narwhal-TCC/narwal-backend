@@ -14,7 +14,7 @@ from app.repositories.analyses import AnalysisRepository, new_analysis_id
 from app.repositories.s3_store import DEFAULT_PRESIGN_EXPIRES_SECONDS, S3ObjectStore
 from app.schemas.analysis import AnalysisResult
 from app.services.detection_adapter import to_detections
-from app.services.model_gateway import ModelGateway
+from app.services.gateway_pool import GatewayPool
 from app.services.model_registry import resolve_model_id
 from app.services.primary_class import compute_primary_class, count_milco
 
@@ -26,12 +26,12 @@ ALLOWED_FORMATS = {"PNG": ("image/png", "png"), "JPEG": ("image/jpeg", "jpg")}
 class AnalyzeService:
     def __init__(
         self,
-        model_gateway: ModelGateway,
+        gateway_pool: GatewayPool,
         object_store: S3ObjectStore | None = None,
         repository: AnalysisRepository | None = None,
         timeout_seconds: int | None = None,
     ) -> None:
-        self.model_gateway = model_gateway
+        self.gateway_pool = gateway_pool
         self.object_store = object_store or S3ObjectStore()
         self.repository = repository or AnalysisRepository()
         self.timeout_seconds = timeout_seconds or get_settings().inference_timeout_seconds
@@ -56,11 +56,12 @@ class AnalyzeService:
             content_type, data
         )
         resolved_model_id = resolve_model_id(model_id)
+        gateway = self.gateway_pool.get(resolved_model_id)
 
         # Loading happens before any write so a model failure never leaves an analysis behind.
-        self.model_gateway.ensure_model_loaded()
+        gateway.ensure_model_loaded()
         started = time.perf_counter()
-        raw = self._predict_with_timeout(image_array)
+        raw = self._predict_with_timeout(gateway, image_array)
         inference_ms = int((time.perf_counter() - started) * 1000)
 
         detections = to_detections(raw, image_width=width, image_height=height)
@@ -182,10 +183,10 @@ class AnalyzeService:
         image_content_type, ext = ALLOWED_FORMATS[image_format]
         return width, height, image_content_type, ext, image_array
 
-    def _predict_with_timeout(self, image_array: np.ndarray) -> Any:
+    def _predict_with_timeout(self, gateway: Any, image_array: np.ndarray) -> Any:
         executor = ThreadPoolExecutor(max_workers=1)
         try:
-            future = executor.submit(self.model_gateway.predict, image_array)
+            future = executor.submit(gateway.predict, image_array)
             try:
                 return future.result(timeout=self.timeout_seconds)
             except FutureTimeoutError as exc:
