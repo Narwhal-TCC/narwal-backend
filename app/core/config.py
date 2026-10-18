@@ -97,6 +97,15 @@ class Settings(BaseSettings):
     list_scan_cap: int = Field(default=500, alias="LIST_SCAN_CAP")
     max_metadata_length: int = Field(default=256, alias="MAX_METADATA_LENGTH")
 
+    # LLM (OpenAI-compatible Chat Completions)
+    llm_base_url: str = Field(
+        default="https://api.groq.com/openai/v1",
+        alias="LLM_BASE_URL",
+    )
+    llm_model: str = Field(default="openai/gpt-oss-120b", alias="LLM_MODEL")
+    llm_api_key: str = Field(default="", alias="LLM_API_KEY")
+    llm_timeout_seconds: float = Field(default=10.0, alias="LLM_TIMEOUT_SECONDS")
+
 
 def _split_csv(value: str) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]

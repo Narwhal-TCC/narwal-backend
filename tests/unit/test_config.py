@@ -34,17 +34,34 @@ def test_list_scan_cap_loads_from_env(monkeypatch):
     assert settings.list_scan_cap == 750
 
 
+def test_llm_settings_load_from_env(monkeypatch):
+    monkeypatch.setenv("LLM_BASE_URL", "http://llm.test/v1")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("LLM_API_KEY", "secret-key")
+    monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "15")
+    get_settings.cache_clear()
+    settings = get_settings()
+    assert settings.llm_base_url == "http://llm.test/v1"
+    assert settings.llm_model == "test-model"
+    assert settings.llm_api_key == "secret-key"
+    assert settings.llm_timeout_seconds == 15.0
+
+
 def test_local_defaults_are_safe_for_dev():
     env_keys = (
         "S3_ENDPOINT_URL",
         "S3_PUBLIC_ENDPOINT",
         "SQLITE_PATH",
         "JWT_SECRET",
+        "LLM_API_KEY",
+        "LLM_BASE_URL",
+        "LLM_MODEL",
+        "LLM_TIMEOUT_SECONDS",
     )
     saved = {key: os.environ.pop(key, None) for key in env_keys}
     get_settings.cache_clear()
     try:
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.s3_bucket == "narwal"
         assert settings.sqlite_path == "db/narwal.db"
         assert settings.aws_region == "us-east-1"
@@ -52,6 +69,10 @@ def test_local_defaults_are_safe_for_dev():
         assert settings.list_scan_cap == 500
         assert settings.max_metadata_length == 256
         assert settings.jwt_secret != ""
+        assert settings.llm_base_url == "https://api.groq.com/openai/v1"
+        assert settings.llm_model == "openai/gpt-oss-120b"
+        assert settings.llm_api_key == ""
+        assert settings.llm_timeout_seconds == 10.0
     finally:
         for key, value in saved.items():
             if value is not None:
