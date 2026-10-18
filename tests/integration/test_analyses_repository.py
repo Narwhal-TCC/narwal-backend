@@ -221,13 +221,14 @@ def test_null_model_id_in_sql_reads_back_as_two_stage_pt():
           review_status TEXT, primary_class TEXT, campaign_name TEXT,
           coordinates TEXT, collected_at TEXT, milco_detection_count INTEGER,
           detections TEXT, image_s3_key TEXT, image_content_type TEXT,
-          created_at TEXT, inference_ms INTEGER, model_id TEXT
+          created_at TEXT, inference_ms INTEGER, model_id TEXT,
+          ai_analysis_json TEXT, ai_status TEXT, ai_reason TEXT
         )
         """
     )
     conn.execute(
         """
-        INSERT INTO analyses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO analyses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             "an-null-model",
@@ -245,6 +246,9 @@ def test_null_model_id_in_sql_reads_back_as_two_stage_pt():
             "image/png",
             "2026-09-13T12:00:00+00:00",
             42,
+            None,
+            None,
+            None,
             None,
         ),
     )

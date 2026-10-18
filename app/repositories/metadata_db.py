@@ -62,6 +62,13 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
               ADD COLUMN model_id TEXT NOT NULL DEFAULT 'two-stage-pt'
             """
         )
+    columns = _analyses_column_names(conn)
+    if "ai_analysis_json" not in columns:
+        conn.execute("ALTER TABLE analyses ADD COLUMN ai_analysis_json TEXT")
+    if "ai_status" not in columns:
+        conn.execute("ALTER TABLE analyses ADD COLUMN ai_status TEXT")
+    if "ai_reason" not in columns:
+        conn.execute("ALTER TABLE analyses ADD COLUMN ai_reason TEXT")
 
 
 def _probe_existing_file(db_path: Path) -> None:

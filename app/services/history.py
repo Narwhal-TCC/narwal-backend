@@ -5,6 +5,7 @@ from app.core.errors import AnalysisNotFoundError, ValidationError
 from app.repositories.analyses import DEFAULT_LIST_LIMIT, AnalysisRepository
 from app.repositories.s3_store import DEFAULT_PRESIGN_EXPIRES_SECONDS, S3ObjectStore
 from app.schemas.analysis import (
+    AiAnalysis,
     AnalysisListResponse,
     AnalysisResult,
     AnalysisSummary,
@@ -160,6 +161,15 @@ class HistoryService:
             return LEGACY_DEFAULT_MODEL_ID
         return value
 
+    @staticmethod
+    def _record_ai_analysis(record: dict) -> AiAnalysis:
+        if "ai_analysis" in record and record["ai_analysis"] is not None:
+            value = record["ai_analysis"]
+            if isinstance(value, AiAnalysis):
+                return value
+            return AiAnalysis.model_validate(value)
+        return AiAnalysis(status="unavailable", reason="disabled")
+
     def _to_summary(self, record: dict) -> AnalysisSummary:
         return AnalysisSummary(
             id=record["id"],
@@ -200,4 +210,5 @@ class HistoryService:
             created_at=record["created_at"],
             inference_ms=record.get("inference_ms"),
             model_id=self._record_model_id(record),
+            ai_analysis=self._record_ai_analysis(record),
         )
