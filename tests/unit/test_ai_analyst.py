@@ -255,6 +255,16 @@ def test_analyze_timeout_maps_to_timeout_reason():
     assert result.reason == "timeout"
 
 
+def test_analyze_connect_error_maps_to_provider_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    analyst = AiAnalyst(settings=_llm_settings(), client=_transport(handler))
+    result = analyst.analyze(_context())
+    assert result.status == "unavailable"
+    assert result.reason == "provider_error"
+
+
 def test_analyze_invalid_json_maps_to_invalid_response():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
