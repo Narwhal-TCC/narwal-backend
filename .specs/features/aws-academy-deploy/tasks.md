@@ -212,9 +212,9 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Viewer protocol HTTPS only
-- [ ] `/api/*` behavior forwards cookies/headers needed for JWT (Authorization, multipart)
-- [ ] `terraform validate` passes
+- [x] Viewer protocol HTTPS only
+- [x] `/api/*` behavior forwards cookies/headers needed for JWT (Authorization, multipart)
+- [x] `terraform validate` passes
 
 **Tests**: none  
 **Gate**: build
@@ -233,8 +233,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] All outputs named in design.md exist
-- [ ] `terraform validate` passes
+- [x] All outputs named in design.md exist
+- [x] `terraform validate` passes
 
 **Tests**: none  
 **Gate**: build
