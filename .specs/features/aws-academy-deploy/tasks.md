@@ -315,9 +315,9 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] User-data references ECR repo from T4
-- [ ] `terraform validate` passes
-- [ ] Infra contract tests still pass
+- [x] User-data references ECR repo from T4
+- [x] `terraform validate` passes
+- [x] Infra contract tests still pass
 
 **Tests**: none  
 **Gate**: quick (`pytest tests/unit/test_infra_contract.py -q` after ec2 change)
