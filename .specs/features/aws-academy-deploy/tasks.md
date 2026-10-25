@@ -190,10 +190,10 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] `iam_instance_profile` uses variable default `LabInstanceProfile` (no `aws_iam_role` creation)
-- [ ] EIP associated with instance
-- [ ] EBS or documented mount point for `SQLITE_PATH`
-- [ ] Instance depends on app bucket and ECR (policy via profile, not TF IAM)
+- [x] `iam_instance_profile` uses variable default `LabInstanceProfile` (no `aws_iam_role` creation)
+- [x] EIP associated with instance
+- [x] EBS or documented mount point for `SQLITE_PATH`
+- [x] Instance depends on app bucket and ECR (policy via profile, not TF IAM)
 
 **Tests**: none  
 **Gate**: build
