@@ -396,8 +396,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Workflow runs on `pull_request` and `push` to default branch
-- [ ] Fails if pytest or validate fails
+- [x] Workflow runs on `pull_request` and `push` to default branch
+- [x] Fails if pytest or validate fails
 
 **Tests**: none  
 **Gate**: build
