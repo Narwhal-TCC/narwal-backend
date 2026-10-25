@@ -150,8 +150,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Repository URL available as Terraform output (wired in T8)
-- [ ] No IAM user creation in this file
+- [x] Repository URL available as Terraform output (wired in T8)
+- [x] No IAM user creation in this file
 
 **Tests**: none  
 **Gate**: build
@@ -170,8 +170,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] SG resource defined and referenced by EC2 in T6
-- [ ] `terraform validate` passes
+- [x] SG resource defined and referenced by EC2 in T6
+- [x] `terraform validate` passes
 
 **Tests**: none  
 **Gate**: build
