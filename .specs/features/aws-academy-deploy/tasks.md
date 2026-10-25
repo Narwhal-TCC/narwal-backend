@@ -129,9 +129,9 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Buckets block public access by default; UI served via CloudFront OAC only
-- [ ] App bucket name aligns with `S3_BUCKET` env for API
-- [ ] `terraform validate` passes
+- [x] Buckets block public access by default; UI served via CloudFront OAC only
+- [x] App bucket name aligns with `S3_BUCKET` env for API
+- [x] `terraform validate` passes
 
 **Tests**: none  
 **Gate**: build
