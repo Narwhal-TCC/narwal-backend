@@ -336,8 +336,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] File contains no real secrets (placeholders only)
-- [ ] README or `infra/README.md` references copying to EC2 as `/etc/narwal/env` (gitignored on server)
+- [x] File contains no real secrets (placeholders only)
+- [x] README or `infra/README.md` references copying to EC2 as `/etc/narwal/env` (gitignored on server)
 
 **Tests**: none  
 **Gate**: build
