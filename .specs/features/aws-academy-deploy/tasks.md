@@ -376,8 +376,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Quick gate passes
-- [ ] Tests cover both script paths under `scripts/aws/`
+- [x] Quick gate passes
+- [x] Tests cover both script paths under `scripts/aws/`
 
 **Tests**: unit  
 **Gate**: quick
