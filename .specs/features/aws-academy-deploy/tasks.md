@@ -253,8 +253,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Apply instructions mention `LabInstanceProfile` and no IAM user creation
-- [ ] Points to smoke script (T14) and ops doc
+- [x] Apply instructions mention `LabInstanceProfile` and no IAM user creation
+- [x] Points to smoke script (T14) and ops doc
 
 **Tests**: none  
 **Gate**: build
