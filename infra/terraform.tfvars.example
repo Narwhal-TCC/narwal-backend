@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars (gitignored) before terraform plan/apply.
+# Start Lab in AWS Academy Learner Lab and use session credentials — never commit secrets.
+
+aws_region           = "us-east-1"
+project_name         = "narwal"
+instance_type        = "t3.medium"
+iam_instance_profile = "LabInstanceProfile"
+
+# Must be globally unique; align with S3_BUCKET on the API container.
+app_bucket_name = "narwal-academy-app-YOUR_UNIQUE_SUFFIX"
+
+tags = {
+  Project = "narwal"
+  Managed = "terraform"
+}

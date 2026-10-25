@@ -106,9 +106,9 @@ Tasks T21–T22.
 
 **Done when**:
 
-- [ ] `instance_type` defaults to `t3.medium`
-- [ ] `iam_instance_profile` defaults to `LabInstanceProfile`
-- [ ] Example tfvars documents Learner Lab usage without secrets
+- [x] `instance_type` defaults to `t3.medium`
+- [x] `iam_instance_profile` defaults to `LabInstanceProfile`
+- [x] Example tfvars documents Learner Lab usage without secrets
 
 **Tests**: none  
 **Gate**: build
