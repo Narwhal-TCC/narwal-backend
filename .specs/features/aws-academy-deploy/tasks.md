@@ -356,8 +356,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Accepts `CLOUDFRONT_URL` env var
-- [ ] Documents demo credentials source (seed users)
+- [x] Accepts `CLOUDFRONT_URL` env var
+- [x] Documents demo credentials source (seed users)
 
 **Tests**: none  
 **Gate**: quick
