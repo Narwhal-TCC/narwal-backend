@@ -17,13 +17,19 @@ docker compose up --build
 | API | http://localhost:8080 | OpenAPI at `/docs`, liveness at `/health` |
 | MinIO API | http://localhost:9000 | bucket `narwal`, created by `minio-init` and on startup |
 | MinIO console | http://localhost:9001 | `minioadmin` / `minioadmin` |
-| Metadata | `./db/narwal.db` on the host | Mounted read-write into the app container; users and analyses survive restarts |
+| Metadata | `./db/narwal.db` on the host | Bind-mounted at `/app/db`; `FIX_DB_PERMISSIONS=1` in Compose fixes Windows/Linux dev ownership for uid 1001 |
+
+On AWS the app uses **`/data/narwal.db`** on EBS (not `./db`). Prepare the mount once on the instance: `sudo sh scripts/prepare-sqlite-volume.sh /data`. Do **not** set `FIX_DB_PERMISSIONS` in production.
 
 Startup runs a best-effort bootstrap: ensure the bucket, upload the local RetinaNet and fusion
 `.pt` artifacts from `DETECTOR_LOCAL_PATH` / `CLASSIFIER_LOCAL_PATH` when missing in object storage,
 seed the platform admin from `PLATFORM_ADMIN_*` and a demo member from `SEED_DEMO_*` when absent in
 the database file, and preload both models. Each step logs a warning and the API still serves if a
 backing store is not ready yet.
+
+## AWS deployment (Learner Lab)
+
+Spec, design, architecture diagram, cost analysis, and runbook: [`docs/aws/README.md`](docs/aws/README.md).
 
 ## Environment variables
 

@@ -8,10 +8,12 @@ from app.repositories.s3_store import S3ObjectStore
 from app.services.model_gateway import ModelGateway, TwoStageTorchGateway
 from app.services.model_registry import DEFAULT_MODEL_ID
 from app.services.yolo_convnext import YoloConvnextGateway, YoloConvnextWeights
+from app.services.yolo_fusion_v3 import YoloFusionV3Gateway, YoloFusionV3Weights
 
 YOLO_BALANCED_ID = "yolo-convnext-balanced"
 YOLO_RECALL_ID = "yolo-convnext-recall"
 TWO_STAGE_ID = "two-stage-pt"
+YOLO_FUSION_V3_ID = "yolo-fusion-v3"
 
 FUSION_CONF_BY_ID = {
     YOLO_BALANCED_ID: 0.4,
@@ -29,10 +31,12 @@ class GatewayPool:
         store: S3ObjectStore | None = None,
         *,
         yolo_weights: YoloConvnextWeights | None = None,
+        fusion_v3_weights: YoloFusionV3Weights | None = None,
         gateway_factories: dict[str, GatewayFactory] | None = None,
     ) -> None:
         self._store = store or S3ObjectStore()
         self._yolo_weights = yolo_weights
+        self._fusion_v3_weights = fusion_v3_weights
         self._gateway_factories = gateway_factories or {}
         self._gateways: dict[str, ModelGateway] = {}
         self._lock = threading.Lock()
@@ -55,6 +59,11 @@ class GatewayPool:
             self._yolo_weights = YoloConvnextWeights(self._store)
         return self._yolo_weights
 
+    def _shared_fusion_v3_weights(self) -> YoloFusionV3Weights:
+        if self._fusion_v3_weights is None:
+            self._fusion_v3_weights = YoloFusionV3Weights(self._store)
+        return self._fusion_v3_weights
+
     def _build(self, model_id: str) -> ModelGateway:
         factory = self._gateway_factories.get(model_id)
         if factory is not None:
@@ -64,6 +73,8 @@ class GatewayPool:
         fusion_conf = FUSION_CONF_BY_ID.get(model_id)
         if fusion_conf is not None:
             return YoloConvnextGateway(self._shared_yolo_weights(), fusion_conf)
+        if model_id == YOLO_FUSION_V3_ID:
+            return YoloFusionV3Gateway(self._shared_fusion_v3_weights())
         raise KeyError(f"Unregistered model id: {model_id}")
 
     def preload_default(self) -> Any:

@@ -16,19 +16,35 @@ EXPECTED_CATALOG = {
         {
             "id": "yolo-convnext-balanced",
             "label": "YOLO + ConvNeXt (equilibrado)",
-            "description": "53 de 75 minas no teste, 11 falsos alarmes",
+            "description": (
+                "Recomendado no dia a dia: equilibra achar minas e limitar falsos alarmes."
+            ),
             "is_default": True,
         },
         {
             "id": "yolo-convnext-recall",
             "label": "YOLO + ConvNeXt (recall)",
-            "description": "58 de 75 minas no teste, 25 falsos alarmes",
+            "description": (
+                "Prioriza não deixar minas passarem; tende a gerar mais pontos para revisar."
+            ),
             "is_default": False,
         },
         {
             "id": "two-stage-pt",
             "label": "RetinaNet + fusão (PyTorch)",
-            "description": "36 de 75 minas no teste, 7 falsos alarmes",
+            "description": (
+                "Versão anterior: menos falsos alarmes, porém localiza menos minas. "
+                "Indicado para comparar com análises antigas."
+            ),
+            "is_default": False,
+        },
+        {
+            "id": "yolo-fusion-v3",
+            "label": "YOLO A + fusão ConvNeXt/EdgeNeXt (v3)",
+            "description": (
+                "Variação mais nova do detector: localiza mais minas que o legado, "
+                "com mais falsos alarmes que o equilibrado."
+            ),
             "is_default": False,
         },
     ]

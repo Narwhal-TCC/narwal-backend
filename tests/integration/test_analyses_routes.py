@@ -83,6 +83,7 @@ def _pool_for_gateway(gateway: ConfigurableModelGateway) -> GatewayPool:
             "yolo-convnext-balanced": lambda g=gateway: g,
             "yolo-convnext-recall": lambda g=gateway: g,
             "two-stage-pt": lambda g=gateway: g,
+            "yolo-fusion-v3": lambda g=gateway: g,
         }
     )
 
@@ -979,6 +980,7 @@ def test_post_analyses_routes_each_model_id_to_its_gateway(monkeypatch, tmp_path
             "yolo-convnext-balanced": lambda g=balanced: g,
             "yolo-convnext-recall": lambda g=recall: g,
             "two-stage-pt": lambda g=two_stage: g,
+            "yolo-fusion-v3": lambda g=balanced: g,
         }
     )
 

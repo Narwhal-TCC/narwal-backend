@@ -1,0 +1,58 @@
+# Version control
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+# IDE and agent tooling
+.vscode/
+.idea/
+.cursor/
+.agents/
+*.swp
+*.swo
+*~
+
+# Documentation (README.md is required for setuptools metadata during build)
+*.md
+!README.md
+docs/
+.specs/
+
+# Docker (avoid recursive context)
+Dockerfile*
+compose.yaml
+docker-compose*.yml
+docker-compose*.yaml
+.dockerignore
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+.pytest_cache/
+
+# Tests and dev scripts (not copied into the image)
+tests/
+scripts/
+skills-lock.json
+
+# Runtime data (mounted via compose, not baked into the image)
+data/
+db/
+
+# OS files
+.DS_Store
+Thumbs.db

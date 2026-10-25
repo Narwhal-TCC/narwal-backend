@@ -6,6 +6,7 @@ from app.core.errors import ModelUnavailableError
 from app.services.gateway_pool import FUSION_CONF_BY_ID, GatewayPool
 from app.services.model_gateway import FakeModelGateway
 from app.services.yolo_convnext import YoloConvnextGateway, YoloConvnextWeights
+from app.services.yolo_fusion_v3 import YoloFusionV3Gateway
 
 
 class CountingStore:
@@ -101,3 +102,9 @@ def test_pooled_gateways_apply_fusion_conf_from_fusion_conf_by_id():
 
     assert len(recall_rows) == 1
     assert balanced_rows == []
+
+
+def test_pool_builds_fusion_v3_gateway():
+    pool = GatewayPool(fusion_v3_weights=NoLoadWeights())  # type: ignore[arg-type]
+    gateway = pool.get("yolo-fusion-v3")
+    assert isinstance(gateway, YoloFusionV3Gateway)

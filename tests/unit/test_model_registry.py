@@ -9,20 +9,26 @@ from app.services.model_registry import (
 )
 
 
-def test_registry_lists_three_models_in_catalog_order():
+def test_registry_lists_four_models_in_catalog_order():
     models = list_models()
-    assert len(models) == 3
+    assert len(models) == 4
     assert [entry.id for entry in models] == [
         "yolo-convnext-balanced",
         "yolo-convnext-recall",
         "two-stage-pt",
+        "yolo-fusion-v3",
     ]
     balanced = models[0]
     assert balanced.label == "YOLO + ConvNeXt (equilibrado)"
-    assert balanced.description == "53 de 75 minas no teste, 11 falsos alarmes"
+    assert balanced.description == (
+        "Recomendado no dia a dia: equilibra achar minas e limitar falsos alarmes."
+    )
     assert balanced.is_default is True
     assert sum(1 for entry in models if entry.is_default) == 1
     assert REGISTRY[0].id == "yolo-convnext-balanced"
+    fusion_v3 = models[3]
+    assert fusion_v3.id == "yolo-fusion-v3"
+    assert fusion_v3.label == "YOLO A + fusão ConvNeXt/EdgeNeXt (v3)"
 
 
 def test_default_model_id_is_balanced_pipeline():
@@ -37,6 +43,7 @@ def test_default_model_id_is_balanced_pipeline():
         ("yolo-convnext-balanced", "yolo-convnext-balanced"),
         ("yolo-convnext-recall", "yolo-convnext-recall"),
         ("two-stage-pt", "two-stage-pt"),
+        ("yolo-fusion-v3", "yolo-fusion-v3"),
     ],
 )
 def test_resolve_model_id_accepts_default_and_exact_id(raw, expected):

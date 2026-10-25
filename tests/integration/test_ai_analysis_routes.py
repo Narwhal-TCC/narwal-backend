@@ -78,6 +78,7 @@ def _pool_for(gateway: ConfigurableModelGateway) -> GatewayPool:
             "yolo-convnext-balanced": lambda g=gateway: g,
             "yolo-convnext-recall": lambda g=gateway: g,
             "two-stage-pt": lambda g=gateway: g,
+            "yolo-fusion-v3": lambda g=gateway: g,
         }
     )
 

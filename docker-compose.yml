@@ -54,6 +54,8 @@ services:
       S3_FORCE_PATH_STYLE: "true"
       S3_BUCKET: narwal
       SQLITE_PATH: /app/db/narwal.db
+      # Dev-only: fix bind-mount ./db ownership after root-owned containers (see docker-entrypoint.sh).
+      FIX_DB_PERMISSIONS: "1"
       JWT_SECRET: dev-only-change-me
       PLATFORM_ADMIN_USERNAME: admin
       PLATFORM_ADMIN_PASSWORD: admin
@@ -67,6 +69,20 @@ services:
       CLASSIFIER_S3_URI: s3://narwal/models/v1/fusion_ghostnetv2_mobilenetv2_melhor.pt
       INFERENCE_TIMEOUT_SECONDS: "60"
       DETECTOR_SCORE_THRESHOLD: "0.5"
+      YOLO_G5_LOCAL_PATH: /app/data/models/v2/G5_best.pt
+      YOLO_G5_S3_URI: s3://narwal/models/v2/G5_best.pt
+      YOLO_A_LOCAL_PATH: /app/data/models/v2/yolo_a_best.pt
+      YOLO_A_S3_URI: s3://narwal/models/v2/yolo_a_best.pt
+      CONVNEXT_LOCAL_PATHS: >-
+        /app/data/models/v2/convnext_pico_224_s42.pt,
+        /app/data/models/v2/convnext_pico_224_s43.pt,
+        /app/data/models/v2/convnext_pico_224_s44.pt
+      CONVNEXT_S3_URIS: >-
+        s3://narwal/models/v2/convnext_pico_224_s42.pt,
+        s3://narwal/models/v2/convnext_pico_224_s43.pt,
+        s3://narwal/models/v2/convnext_pico_224_s44.pt
+      YOLO_FUSION_V3_CLASSIFIER_LOCAL_PATH: /app/data/models/v3/fusao_edgenext_small_best.pt
+      YOLO_FUSION_V3_CLASSIFIER_S3_URI: s3://narwal/models/v3/fusao_edgenext_small_best.pt
     volumes:
       - ./data:/app/data:ro
       - ./db:/app/db

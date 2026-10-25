@@ -93,6 +93,16 @@ class Settings(BaseSettings):
         alias="CONVNEXT_LOCAL_PATHS",
     )
 
+    # YOLO Model A + ConvNeXt/EdgeNeXt fusion on crops (main / TESTE_CONNEXT_FUSAO)
+    yolo_fusion_v3_classifier_s3_uri: str = Field(
+        default="s3://narwal/models/v3/fusao_edgenext_small_best.pt",
+        alias="YOLO_FUSION_V3_CLASSIFIER_S3_URI",
+    )
+    yolo_fusion_v3_classifier_local_path: str | None = Field(
+        default="data/models/v3/fusao_edgenext_small_best.pt",
+        alias="YOLO_FUSION_V3_CLASSIFIER_LOCAL_PATH",
+    )
+
     # Analysis list / metadata bounds
     list_scan_cap: int = Field(default=500, alias="LIST_SCAN_CAP")
     max_metadata_length: int = Field(default=256, alias="MAX_METADATA_LENGTH")

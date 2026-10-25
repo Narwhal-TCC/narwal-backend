@@ -19,7 +19,9 @@ from app.services.ai_analyst import SYSTEM_PROMPT
 PAYLOAD = {
     "model_id": "yolo-convnext-balanced",
     "model_label": "YOLO + ConvNeXt (equilibrado)",
-    "model_description": "53 de 75 minas no teste, 11 falsos alarmes",
+    "model_description": (
+        "Recomendado no dia a dia: equilibra achar minas e limitar falsos alarmes."
+    ),
     "image_width": 640,
     "image_height": 480,
     "detections": [

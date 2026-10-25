@@ -4,6 +4,22 @@ from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
 
 
+def seed_v3_fusion_model_artifacts(store: S3ObjectStore | None = None) -> None:
+    """Upload local YOLO-A + fusion v3 classifier when absent from object storage."""
+    settings = get_settings()
+    s3 = store or S3ObjectStore()
+    pairs: list[tuple[str | None, str]] = [
+        (settings.yolo_a_local_path, settings.yolo_a_s3_uri),
+        (
+            settings.yolo_fusion_v3_classifier_local_path,
+            settings.yolo_fusion_v3_classifier_s3_uri,
+        ),
+    ]
+    for local_path, s3_uri in pairs:
+        if local_path:
+            s3.seed_model_if_missing(local_path, s3_uri)
+
+
 def seed_v2_model_artifacts(store: S3ObjectStore | None = None) -> None:
     """Upload local v2 YOLO / ConvNeXt weights when absent from object storage."""
     settings = get_settings()

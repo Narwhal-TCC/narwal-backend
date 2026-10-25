@@ -9,7 +9,7 @@ from app.api.deps import get_gateway_pool
 from app.api.routes.analyses import router as analyses_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.models import router as models_router
-from app.bootstrap.seed import run_seed, seed_v2_model_artifacts
+from app.bootstrap.seed import run_seed, seed_v2_model_artifacts, seed_v3_fusion_model_artifacts
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError, register_error_handlers
 from app.repositories.s3_store import S3ObjectStore
@@ -36,6 +36,7 @@ def bootstrap() -> None:
         ):
             logger.info("Uploaded local classifier artifact to object storage")
         seed_v2_model_artifacts(store)
+        seed_v3_fusion_model_artifacts(store)
     except Exception:
         logger.warning("Could not seed model artifacts to object storage", exc_info=True)
     try:
