@@ -437,8 +437,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Workflow fails if health check fails (covers EC2 stopped case with clear log message)
-- [ ] Instance id from repo variable
+- [x] Workflow fails if health check fails (covers EC2 stopped case with clear log message)
+- [x] Instance id from repo variable
 
 **Tests**: none  
 **Gate**: build
