@@ -294,9 +294,9 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Script is idempotent-safe (stop/remove old container name)
-- [ ] Documents required env vars (no secret values)
-- [ ] Uses instance metadata/profile for ECR login (no hardcoded keys)
+- [x] Script is idempotent-safe (stop/remove old container name)
+- [x] Documents required env vars (no secret values)
+- [x] Uses instance metadata/profile for ECR login (no hardcoded keys)
 
 **Tests**: none  
 **Gate**: quick
