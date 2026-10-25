@@ -273,9 +273,9 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Tests fail if `aws_iam_user` appears in `infra/`
-- [ ] Tests assert required `.tf` files exist
-- [ ] Quick gate passes
+- [x] Tests fail if `aws_iam_user` appears in `infra/`
+- [x] Tests assert required `.tf` files exist
+- [x] Quick gate passes
 
 **Tests**: unit  
 **Gate**: quick
