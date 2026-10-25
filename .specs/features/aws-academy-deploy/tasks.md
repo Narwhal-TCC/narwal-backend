@@ -457,8 +457,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Secrets/vars documented in frontend deploy doc (T20)
-- [ ] Workflow does not echo AWS secrets
+- [x] Secrets/vars documented in frontend deploy doc (T20)
+- [x] Workflow does not echo AWS secrets
 
 **Tests**: unit (vitest in workflow)  
 **Gate**: full (`npm test` in CI)
@@ -477,8 +477,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Cross-repo links are valid relative paths or full GitHub paths
-- [ ] States CloudFront same-origin `/api` requirement (no Vite proxy in prod)
+- [x] Cross-repo links are valid relative paths or full GitHub paths
+- [x] States CloudFront same-origin `/api` requirement (no Vite proxy in prod)
 
 **Tests**: none  
 **Gate**: build
@@ -497,9 +497,9 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Diagram matches Terraform (ECR, EIP, t3.medium)
-- [ ] Cost doc unchanged in assumptions unless instance/storage sizes changed
-- [ ] Ops doc lists GHA secrets and `scripts/aws/smoke_cloudfront.sh`
+- [x] Diagram matches Terraform (ECR, EIP, t3.medium)
+- [x] Cost doc unchanged in assumptions unless instance/storage sizes changed
+- [x] Ops doc lists GHA secrets and `scripts/aws/smoke_cloudfront.sh`
 
 **Tests**: none  
 **Gate**: build
@@ -518,8 +518,8 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Checklist includes presigned image verification on result page
-- [ ] Spec traceability table updated for DEPLOY-01–DEPLOY-15 (status Verified or N/A with evidence note)
+- [x] Checklist includes presigned image verification on result page
+- [x] Spec traceability table updated for DEPLOY-01–DEPLOY-15 (status Verified or N/A with evidence note)
 
 **Tests**: none  
 **Gate**: build

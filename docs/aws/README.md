@@ -11,7 +11,8 @@ Documentation for deploying Narwal to **AWS Academy Learner Lab**, aligned with 
 | [architecture.md](./architecture.md) | TCC report, reviewers | Topology, components, security notes |
 | [cost-analysis.md](./cost-analysis.md) | TCC report, budget | Monthly scenarios, EC2 hours vs 24/7 |
 | [learner-lab-operations.md](./learner-lab-operations.md) | Developers | Start Lab, smoke tests, ECR, sizing |
+| [validation-checklist.md](./validation-checklist.md) | Demo sign-off | P1 browser checklist (login, analyze, presigned image) |
 
-**Implementation status:** Spec and docs are in place; Terraform (`infra/`), GitHub Actions, and frontend production routing are **not implemented yet** (next execution phase).
+**Implementation status:** Terraform (`infra/`), backend and frontend GitHub Actions deploy workflows, and AWS docs are **implemented** on `master`. Complete P1 sign-off in Learner Lab using [validation-checklist.md](./validation-checklist.md).
 
 **Locked decisions (2026-10-25):** CloudFront + S3 + EC2, **ECR**, **SQLite on EBS**, initial **t3.medium**, **Elastic IP**, Terraform under `narwal-backend/infra/`.

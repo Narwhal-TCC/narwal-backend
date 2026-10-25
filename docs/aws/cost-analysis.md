@@ -2,7 +2,7 @@
 
 Estimates for **us-east-1**, **on-demand** pricing (order of magnitude). Learner Lab consumes **platform credit** (~$100 per student); treat these numbers as planning guides, not invoices.
 
-**Stack:** CloudFront + S3 (UI + data) + EC2 (API, **t3.medium** initial) + EIP + EBS + **ECR** + SQLite on EBS (no RDS).
+**Stack (as provisioned in `infra/`):** CloudFront + S3 (UI + app data) + EC2 API (**t3.medium** default, **30 GiB** root gp3 + separate **data** EBS volume) + EIP + **ECR** + SQLite on EBS (no RDS).
 
 ---
 

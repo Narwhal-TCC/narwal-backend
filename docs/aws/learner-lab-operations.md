@@ -1,34 +1,43 @@
 # AWS Academy Learner Lab — Narwal operations
 
-Runbook for developers operating Narwal in **Learner Lab** (`us-east-1` recommended). Complements Terraform (once added under `infra/`) and GitHub Actions deploys.
+Runbook for developers operating Narwal in **Learner Lab** (`us-east-1` recommended). Complements Terraform under [`infra/`](../../infra/) and GitHub Actions deploys.
 
 ## Before each work session
 
 1. Open **AWS Academy** → **Learner Lab** → **Start Lab** (wait for green status).
-2. Copy **AWS Access Key ID**, **Secret Access Key**, and **Session Token** if using CLI locally.
-3. In EC2 console, **start** the API instance if it is stopped.
-4. Confirm **Elastic IP** is still associated (same IP after stop/start when EIP is attached).
+2. Copy **AWS Access Key ID**, **Secret Access Key**, and **Session Token** if using CLI locally or refreshing GitHub secrets.
+3. In EC2 console, **start** the API instance (`api_instance_id` from `terraform output`) if it is stopped.
+4. Confirm **Elastic IP** (`api_elastic_ip`) is still associated (same IP after stop/start when EIP is attached).
 
 ## Public URL
 
-- **Primary link for slides:** CloudFront domain from Terraform output (`cloudfront_domain_name`).
+- **Primary link for slides:** `terraform output -raw cloudfront_domain_name` → `https://<value>/`
 - Do **not** use raw EC2 IP for HTTPS demos unless CloudFront is misconfigured.
 
 ## Smoke test (after API is running)
 
-Replace `https://<cloudfront-domain>` with your distribution.
+### Script (recommended)
+
+```bash
+export CLOUDFRONT_URL="https://$(terraform -chdir=infra output -raw cloudfront_domain_name)"
+./scripts/aws/smoke_cloudfront.sh
+```
+
+The script curls `/api/health` and `/api/auth/login` via CloudFront and exits non-zero on failure. Demo credentials are the seeded users (see `app/bootstrap/seed.py`).
+
+### Manual curls
 
 ```bash
 # Login
-curl -s -X POST "https://<cloudfront-domain>/api/auth/login" \
+curl -s -X POST "${CLOUDFRONT_URL%/}/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"demo","password":"demo"}'
 
 # Health (via CloudFront)
-curl -s "https://<cloudfront-domain>/api/health"
+curl -s "${CLOUDFRONT_URL%/}/api/health"
 ```
 
-Then use the browser: login → new analysis → upload image.
+Then use the browser: login → new analysis → upload image (full P1 steps in [validation-checklist.md](./validation-checklist.md)).
 
 ## One-time / rare tasks
 
@@ -37,7 +46,8 @@ Then use the browser: login → new analysis → upload image.
 From a machine with AWS creds and local `data/models/`:
 
 ```bash
-aws s3 sync "data/models/" "s3://<app-bucket>/models/" --exclude "*" --include "*.pt"
+APP_BUCKET="$(terraform -chdir=infra output -raw app_bucket_name)"
+aws s3 sync "data/models/" "s3://${APP_BUCKET}/models/" --exclude "*" --include "*.pt"
 ```
 
 Adjust paths to match `DETECTOR_S3_URI`, `YOLO_G5_S3_URI`, etc. in `.env.example`.
@@ -56,16 +66,7 @@ On the instance (as root), before the first container start:
 sudo sh /path/to/narwal-backend/scripts/prepare-sqlite-volume.sh /data
 ```
 
-Example run after ECR pull (adjust image URL and env file):
-
-```bash
-docker run -d --name narwal-api --restart unless-stopped \
-  -p 8080:8080 \
-  -v /data:/data \
-  -e SQLITE_PATH=/data/narwal.db \
-  --env-file /etc/narwal/api.env \
-  <account>.dkr.ecr.us-east-1.amazonaws.com/narwal-api:latest
-```
+Production env template: [`.env.aws.example`](../../.env.aws.example) → copy to `/etc/narwal/env` on the instance (gitignored on the server). Bootstrap: [`scripts/aws/ec2-api-bootstrap.sh`](../../scripts/aws/ec2-api-bootstrap.sh).
 
 If you see **`503 Metadata store is unavailable`** or SQLite **readonly database** in logs, check ownership: `ls -la /data` should show uid **1001** (or re-run the prepare script).
 
@@ -74,16 +75,17 @@ If you see **`503 Metadata store is unavailable`** or SQLite **readonly database
 If GitHub Actions is not wired yet:
 
 ```bash
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
+ECR_URL="$(terraform -chdir=infra output -raw ecr_repository_url)"
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "${ECR_URL%%/*}"
 docker build -t narwal-api .
-docker tag narwal-api:latest <ecr-repo-url>:latest
-docker push <ecr-repo-url>:latest
-# On EC2: pull and run with env file + volume for SQLITE_PATH
+docker tag narwal-api:latest "${ECR_URL}:latest"
+docker push "${ECR_URL}:latest"
+# On EC2: pull and run via ec2-api-bootstrap.sh or deploy-aws.yml SSM commands
 ```
 
 ## EC2 instance sizing
 
-- **Initial:** `t3.medium` (4 GiB RAM).
+- **Initial:** `t3.medium` (4 GiB RAM) — Terraform variable `instance_type` default.
 - **Symptom of insufficient RAM:** container restart, `503 MODEL_UNAVAILABLE`, OOM in `dmesg` / Docker logs during startup or first analyze.
 - **Action:** Stop instance → change type to **`t3.large`** → start → retest.
 - Default preload loads **YOLO G5, YOLO A, and three ConvNeXt** weights; switching models may load more.
@@ -105,17 +107,39 @@ Stopping EC2 **saves credit**; S3, CloudFront, ECR, and EBS continue to incur st
 | 503 MODEL_UNAVAILABLE | Models missing in S3 or OOM | Sync models; resize instance |
 | 503 Metadata store is unavailable | SQLite path not writable by uid 1001 | Run `prepare-sqlite-volume.sh`; confirm `SQLITE_PATH` matches the mount |
 
-## GitHub Actions secrets (reference)
+## GitHub Actions secrets and variables
 
-Store in **narwal-backend** and **narwal-frontend** repository settings:
+Configure **both** repositories with Learner Lab session credentials (rotate when the lab session ends).
 
-| Secret / variable | Purpose |
-| ----------------- | ------- |
-| `AWS_ACCESS_KEY_ID` | Learner Lab session |
-| `AWS_SECRET_ACCESS_KEY` | Learner Lab session |
-| `AWS_SESSION_TOKEN` | If lab provides temporary session token |
+### Shared secrets
+
+| Secret | Purpose |
+| ------ | ------- |
+| `AWS_ACCESS_KEY_ID` | Learner Lab access key |
+| `AWS_SECRET_ACCESS_KEY` | Learner Lab secret key |
+| `AWS_SESSION_TOKEN` | Session token (required for lab keys) |
+
+### narwal-backend variables
+
+| Variable | Terraform output |
+| -------- | ---------------- |
+| `AWS_REGION` | `us-east-1` (default) |
+| `ECR_REPOSITORY` | `ecr_repository_name` |
+| `ECR_REPOSITORY_URL` | `ecr_repository_url` |
+| `EC2_INSTANCE_ID` | `api_instance_id` |
+| `CLOUDFRONT_URL` | `https://` + `cloudfront_domain_name` |
+
+Workflows: `.github/workflows/ci.yml`, `.github/workflows/deploy-aws.yml`.
+
+### narwal-frontend variables
+
+| Variable | Terraform output |
+| -------- | ---------------- |
 | `AWS_REGION` | `us-east-1` |
-| Variables from Terraform | `ECR_REPOSITORY`, `EC2_INSTANCE_ID`, `UI_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID` |
+| `UI_S3_BUCKET` | `ui_bucket_name` |
+| `CLOUDFRONT_DISTRIBUTION_ID` | `cloudfront_distribution_id` |
+
+See [narwal-frontend/docs/DEPLOY-AWS.md](https://github.com/narwal-tcc/narwal-frontend/blob/master/docs/DEPLOY-AWS.md) (or sibling clone).
 
 Never commit keys or `.env` with production secrets.
 
@@ -123,4 +147,5 @@ Never commit keys or `.env` with production secrets.
 
 - [architecture.md](./architecture.md)
 - [cost-analysis.md](./cost-analysis.md)
+- [validation-checklist.md](./validation-checklist.md)
 - Spec: `.specs/features/aws-academy-deploy/spec.md`
