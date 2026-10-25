@@ -416,9 +416,9 @@ _Order: S3 before ECR/SG so later `.tf` files can reference bucket resources._
 
 **Done when**:
 
-- [ ] Uses repository secrets for AWS keys (no plaintext keys in YAML)
-- [ ] ECR repository from repo variable matching Terraform output
-- [ ] Does not print secrets in logs
+- [x] Uses repository secrets for AWS keys (no plaintext keys in YAML)
+- [x] ECR repository from repo variable matching Terraform output
+- [x] Does not print secrets in logs
 
 **Tests**: none  
 **Gate**: build
