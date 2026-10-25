@@ -1,14 +1,21 @@
 resource "aws_security_group" "api" {
   name        = "${var.project_name}-api"
-  description = "Narwal API instance (Docker on 8080)"
+  description = "Narwal edge (Nginx :80; API bound to localhost only)"
 
-  # MVP Learner Lab: open 8080 for CloudFront custom origin (restrict to CloudFront prefix list when lab allows).
   ingress {
-    description = "HTTP API from CloudFront custom origin (MVP: 0.0.0.0/0 in lab account)"
-    from_port   = 8080
-    to_port     = 8080
+    description = "HTTP for Nginx (UI + /api proxy)"
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "SSH admin access"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = var.ssh_allowed_cidr_blocks
   }
 
   egress {

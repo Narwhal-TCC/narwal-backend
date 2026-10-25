@@ -6,6 +6,9 @@ project_name         = "narwal"
 instance_type        = "t3.medium"
 iam_instance_profile = "LabInstanceProfile"
 
+# SSH (optional): restrict to your IP, e.g. ["203.0.113.10/32"]
+# ssh_allowed_cidr_blocks = ["0.0.0.0/0"]
+
 # Must be globally unique; align with S3_BUCKET on the API container.
 app_bucket_name = "narwal-academy-app-YOUR_UNIQUE_SUFFIX"
 

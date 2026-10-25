@@ -1,64 +1,63 @@
 # Narwal AWS architecture (Academy Learner Lab)
 
-This document describes the **deployed production topology** for Narwal on AWS Academy Learner Lab. It aligns with `.specs/features/aws-academy-deploy/spec.md` and `design.md`.
+Production topology for Narwal on AWS Academy Learner Lab, aligned with `.specs/features/aws-academy-deploy/spec.md`.
 
 ## Goals
 
-- One **public HTTPS URL** for the TCC demo (CloudFront default domain, e.g. `https://dxxxxxxxx.cloudfront.net`).
-- **FastAPI** inference on **EC2** (CPU-only; no GPU in Learner Lab).
-- **React** static hosting on **S3** behind the same CloudFront distribution.
+- One **public HTTP URL** on the **Elastic IP** for the TCC demo (`http://<eip>/`).
+- **Nginx** on EC2 serves the Vite UI and proxies **`/api/*`** to FastAPI (Docker on `127.0.0.1:8080`).
+- **FastAPI** on **EC2** (CPU-only; no GPU in Learner Lab).
 - **Reproducible infrastructure** via Terraform in `narwal-backend/infra/`.
-- **CI/CD** via GitHub Actions pushing to **ECR** (API) and **S3** (UI).
+- **CI/CD** via GitHub Actions: **ECR** (API), **S3 staging + SSM** (UI).
+
+CloudFront is **not** used: Vocareum LabRole denies `cloudfront:*` in this account.
 
 ## High-level diagram
 
 ```mermaid
 flowchart LR
   User[User browser]
-  CF[CloudFront HTTPS]
-  S3UI[S3 static UI]
-  EC2[EC2 Docker API t3.medium]
+  EC2[EC2 Elastic IP]
+  Nginx[Nginx :80]
+  Static[/var/www/narwal]
+  API[Docker API :8080]
   ECR[ECR narwal-api]
-  S3Data[S3 app bucket]
+  S3App[S3 app bucket]
   EBS[(EBS gp3 SQLite)]
-  EIP[Elastic IP]
 
-  User --> CF
-  CF -->|default| S3UI
-  CF -->|/api/*| EC2
-  EIP --- EC2
-  EC2 --> EBS
-  EC2 --> S3Data
-  EC2 --> ECR
+  User --> EC2
+  EC2 --> Nginx
+  Nginx -->|"/"| Static
+  Nginx -->|"/api/*"| API
+  API --> EBS
+  API --> S3App
+  API --> ECR
 ```
 
 ## Terraform resources (implemented)
 
 | Resource (Terraform address) | AWS purpose |
 | ---------------------------- | ----------- |
-| `aws_s3_bucket.ui` | Vite static assets (OAC + CloudFront only) |
-| `aws_s3_bucket.app` | Model weights, uploads, optional DB backups (`S3_BUCKET`) |
+| S3 app bucket (CLI / `create-app-bucket.sh`, not TF) | Model weights, uploads, UI prefix `ui/` (`S3_BUCKET`) |
 | `aws_ecr_repository.api` | Backend container images |
-| `aws_security_group.api` | TCP 8080 to API (lab MVP ingress documented in TF) |
-| `aws_instance.api` | Amazon Linux 2023, `LabInstanceProfile`, **t3.medium** default |
-| `aws_ebs_volume.data` + `aws_volume_attachment.data` | Persistent `/data` for SQLite |
-| `aws_eip.api` + `aws_eip_association.api` | Stable API origin for CloudFront |
-| `aws_cloudfront_distribution.main` | Dual origin: S3 UI + EC2:8080, behavior `/api/*` → API |
+| `aws_security_group.api` | TCP **80** public (Nginx); API not exposed on 8080 |
+| `aws_instance.api` | Amazon Linux 2023, Nginx + Docker, **LabInstanceProfile**, **t3.medium** default |
+| `aws_ebs_volume.data` + attachment | Persistent `/data` for SQLite |
+| `aws_eip.api` + association | Stable public demo URL |
 
-**Outputs** (see `infra/outputs.tf`): `cloudfront_domain_name`, `cloudfront_distribution_id`, `ui_bucket_name`, `app_bucket_name`, `ecr_repository_url`, `ecr_repository_name`, `api_instance_id`, `api_public_ip` / `api_elastic_ip`.
+**Outputs** (`infra/outputs.tf`): `app_public_url`, `app_bucket_name`, `ecr_repository_url`, `ecr_repository_name`, `api_instance_id`, `api_public_ip` / `api_elastic_ip`.
 
 ## Component responsibilities
 
 | Component | Role |
 | --------- | ---- |
-| **CloudFront** | TLS termination; routes `/` to UI bucket; routes `/api/*` to API origin (EC2:8080). |
-| **S3 (UI)** | Hosts Vite production build (`index.html`, `/assets/*`). |
-| **S3 (app)** | Application data bucket (`app_bucket_name` / `S3_BUCKET`): model `.pt` files, analysis uploads. |
-| **EC2** | Runs Docker image from ECR; `uvicorn` on port 8080; **LabInstanceProfile** for S3/ECR API access. |
-| **Elastic IP** | Stable IPv4 for API origin when instance is stopped/started within the lab. |
-| **EBS** | Data volume at `/data` holding `SQLITE_PATH` (SQLite metadata). |
-| **ECR** | Stores immutable backend images produced by GitHub Actions. |
-| **GitHub Actions** | Backend: test, ECR push, SSM restart, `/api/health` check. Frontend: test, build, S3 sync, invalidation. |
+| **Nginx** | Serves static UI; reverse-proxies `/api/*` to the API container on localhost. |
+| **EC2** | Edge + compute; runs Docker from ECR; **LabInstanceProfile** for S3/ECR. |
+| **S3 (app)** | Models, analysis objects, and CI staging for UI under prefix `ui/`. |
+| **Elastic IP** | Stable IPv4 for demos after stop/start. |
+| **EBS** | `/data` → `SQLITE_PATH` (SQLite metadata). |
+| **ECR** | Immutable backend images from GitHub Actions. |
+| **GitHub Actions** | Backend: ECR push, SSM restart, health on `APP_PUBLIC_URL`. Frontend: S3 sync to `ui/`, SSM sync to `/var/www/narwal`. |
 
 ## Application integration
 
@@ -68,65 +67,64 @@ flowchart LR
 | -------- | ------------- | --- |
 | `S3_ENDPOINT_URL` | `http://localhost:9000` | unset |
 | `S3_FORCE_PATH_STYLE` | `true` | `false` |
-| `S3_PUBLIC_ENDPOINT` | `http://localhost:9000` | unset or public HTTPS host for presigned URLs |
+| `S3_PUBLIC_ENDPOINT` | `http://localhost:9000` | unset or public S3 virtual-hosted HTTPS URL for presigned images |
 | `AWS_ACCESS_KEY_ID` | minioadmin | unset (instance profile) |
-| `SQLITE_PATH` | `/app/db/narwal.db` (Compose) | `/data/narwal.db` on persistent EBS |
-| `FIX_DB_PERMISSIONS` | `1` in `docker-compose.yml` only | **unset** — chown the EBS mount on the host once (`scripts/prepare-sqlite-volume.sh`) |
+| `SQLITE_PATH` | `/app/db/narwal.db` (Compose) | `/data/narwal.db` on EBS |
+| `FIX_DB_PERMISSIONS` | `1` in Compose | unset — chown EBS mount once (`scripts/prepare-sqlite-volume.sh`) |
 
-See `.env.aws.example` and `.env.example` in the backend repo for the full list.
+See `.env.aws.example` and `.env.example`.
 
 ### Frontend routing
 
-Development uses Vite proxy (`/api` → `localhost:8080`). In AWS, the **browser origin is CloudFront**, so relative requests like `/api/auth/login` must hit CloudFront and be forwarded to EC2. Production builds must **not** depend on the dev proxy (see `narwal-frontend/docs/DEPLOY-AWS.md`).
+Development uses the Vite proxy (`/api` → `localhost:8080`). In AWS, the **browser origin is the Elastic IP (Nginx on :80)**. Keep **relative** paths such as `/api/auth/login`. Do not rely on the dev proxy in production builds (see `narwal-frontend/docs/DEPLOY-AWS.md`).
 
 ## CI/CD wiring (GitHub)
 
-### narwal-backend (`.github/workflows/`)
+### narwal-backend
 
 | Kind | Name | Maps to |
 | ---- | ---- | ------- |
-| Secret | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` | Learner Lab session |
+| Secret | `AWS_*` session trio | Learner Lab |
 | Variable | `AWS_REGION` | `us-east-1` |
-| Variable | `ECR_REPOSITORY` | `ecr_repository_name` |
-| Variable | `ECR_REPOSITORY_URL` | `ecr_repository_url` |
+| Variable | `ECR_REPOSITORY`, `ECR_REPOSITORY_URL` | Terraform ECR outputs |
 | Variable | `EC2_INSTANCE_ID` | `api_instance_id` |
-| Variable | `CLOUDFRONT_URL` | `https://${cloudfront_domain_name}` |
+| Variable | `APP_PUBLIC_URL` | `app_public_url` |
 
-Workflows: `ci.yml` (test + `terraform validate`); `deploy-aws.yml` (ECR push, SSM restart, post-deploy health).
+Workflows: `ci.yml`, `deploy-aws.yml`.
 
 ### narwal-frontend
 
 | Kind | Name | Maps to |
 | ---- | ---- | ------- |
-| Secret | Same AWS trio as backend | Learner Lab session |
+| Secret | Same AWS trio | Learner Lab |
 | Variable | `AWS_REGION` | `us-east-1` |
-| Variable | `UI_S3_BUCKET` | `ui_bucket_name` |
-| Variable | `CLOUDFRONT_DISTRIBUTION_ID` | `cloudfront_distribution_id` |
+| Variable | `APP_S3_BUCKET` | `app_bucket_name` |
+| Variable | `EC2_INSTANCE_ID` | `api_instance_id` |
 
-Workflow: `deploy-aws.yml` (vitest, Vite build, S3 sync, invalidation).
+Workflow: `deploy-aws.yml` (build → `s3://bucket/ui/` → SSM sync on instance).
 
 ## Security notes (lab scope)
 
-- Secrets (`JWT_SECRET`, admin password, `LLM_API_KEY`) live in **EC2 environment** only—not in git or Terraform plaintext.
-- GitHub Actions uses **Learner Lab access keys** stored as repository secrets; rotate if leaked.
-- Security groups should limit API port exposure where practical; CloudFront is the intended public entry.
+- Secrets on **EC2** only (`/etc/narwal/env`), not in git or Terraform.
+- GitHub Actions uses **Learner Lab access keys** as repository secrets.
+- API listens on **127.0.0.1:8080**; only Nginx is on the public security group.
 
 ## Model runtime and instance sizing
 
-- Default model at startup: **YOLO + ConvNeXt (balanced)** — loads **two YOLO weights and three ConvNeXt classifiers** into memory.
-- **Initial instance: `t3.medium` (4 GiB RAM).** If the container OOMs during preload or analyze, resize to **`t3.large` (8 GiB)** in the EC2 console (allowed up to `large` in Learner Lab).
-- Switching models in the UI may load **additional** pipelines (cached in `GatewayPool`); full registry testing needs more RAM.
+- Default startup model: **YOLO + ConvNeXt (balanced)**.
+- **Initial: `t3.medium` (4 GiB).** OOM → resize to **`t3.large`** in console.
+- Model switching in UI may increase RAM use (`GatewayPool`).
 
-## Out of scope for this architecture
+## Out of scope
 
-- RDS, ECS/Fargate, API Gateway, App Runner, GPU instances, custom DNS (unless later confirmed in your lab allow list).
+- CloudFront, RDS, ECS/Fargate, API Gateway, GPU, custom DNS (unless later confirmed).
 
 ## Traceability
 
 | Doc section | Requirements |
 | ----------- | ------------ |
-| CloudFront + dual origin | DEPLOY-01, DEPLOY-02 |
+| Nginx + single origin | DEPLOY-01, DEPLOY-02 |
 | ECR + GHA | DEPLOY-09, DEPLOY-11 |
 | SQLite on EBS | DEPLOY-08 |
-| S3 models/images | DEPLOY-04 (existing app behavior) |
+| S3 models/images | DEPLOY-04 |
 | This doc + outputs | DEPLOY-12, DEPLOY-15 |

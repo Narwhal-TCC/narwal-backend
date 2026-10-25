@@ -27,6 +27,12 @@ variable "app_bucket_name" {
   type        = string
 }
 
+variable "ssh_allowed_cidr_blocks" {
+  description = "CIDR blocks allowed to SSH to the API instance (port 22). Restrict to your public IP when possible."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 variable "tags" {
   description = "Default tags applied to supported resources."
   type        = map(string)

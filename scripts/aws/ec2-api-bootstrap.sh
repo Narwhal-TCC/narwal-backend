@@ -51,7 +51,7 @@ fi
 docker run -d \
   --name "${CONTAINER_NAME}" \
   --restart unless-stopped \
-  -p 8080:8080 \
+  -p 127.0.0.1:8080:8080 \
   -v /data:/data \
   "${ENV_FILE_ARGS[@]}" \
   "${IMAGE}"

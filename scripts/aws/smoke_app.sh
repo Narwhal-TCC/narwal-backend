@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# HTTPS smoke checks against the public CloudFront URL (UI + /api/* origin).
+# HTTP smoke checks against the public app URL (Nginx on Elastic IP: UI + /api/* proxy).
 #
 # Required environment:
-#   CLOUDFRONT_URL  — distribution URL, e.g. https://d111111abcdef8.cloudfront.net
+#   APP_PUBLIC_URL  — e.g. http://54.123.45.67 (terraform output app_public_url)
 #
 # Optional (defaults match app/bootstrap/seed.py and SEED_DEMO_* in .env.example):
 #   SMOKE_USERNAME  — default demo
@@ -12,12 +12,12 @@
 
 set -euo pipefail
 
-if [[ -z "${CLOUDFRONT_URL:-}" ]]; then
-  echo "CLOUDFRONT_URL is required (e.g. https://d123.cloudfront.net)" >&2
+if [[ -z "${APP_PUBLIC_URL:-}" ]]; then
+  echo "APP_PUBLIC_URL is required (e.g. http://54.123.45.67)" >&2
   exit 1
 fi
 
-BASE="${CLOUDFRONT_URL%/}"
+BASE="${APP_PUBLIC_URL%/}"
 SMOKE_USERNAME="${SMOKE_USERNAME:-demo}"
 SMOKE_PASSWORD="${SMOKE_PASSWORD:-demo}"
 
@@ -47,4 +47,4 @@ if ! grep -q '"access_token"' /tmp/narwal-smoke-login.json; then
   exit 1
 fi
 
-echo "CloudFront smoke checks passed."
+echo "App URL smoke checks passed."

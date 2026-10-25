@@ -17,6 +17,7 @@ resource "aws_instance" "api" {
   ami                    = data.aws_ami.amazon_linux_2023.id
   instance_type          = var.instance_type
   iam_instance_profile   = var.iam_instance_profile
+  key_name               = aws_key_pair.api.key_name
   vpc_security_group_ids = [aws_security_group.api.id]
   user_data              = local.api_user_data
 
@@ -26,7 +27,6 @@ resource "aws_instance" "api" {
   }
 
   depends_on = [
-    aws_s3_bucket.app,
     aws_ecr_repository.api,
   ]
 
@@ -41,8 +41,36 @@ locals {
     set -euo pipefail
     exec > /var/log/narwal-user-data.log 2>&1
 
-    dnf install -y docker aws-cli
+    dnf install -y docker nginx aws-cli
     systemctl enable --now docker
+
+    mkdir -p /var/www/narwal
+    chown -R nginx:nginx /var/www/narwal
+
+    cat > /etc/nginx/conf.d/narwal.conf <<'NGINX'
+    server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        server_name _;
+        root /var/www/narwal;
+        index index.html;
+
+        location /api/ {
+            proxy_pass http://127.0.0.1:8080;
+            proxy_http_version 1.1;
+            proxy_set_header Host $$host;
+            proxy_set_header X-Real-IP $$remote_addr;
+            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $$scheme;
+        }
+
+        location / {
+            try_files $$uri $$uri/ /index.html;
+        }
+    }
+    NGINX
+
+    systemctl enable --now nginx
 
     if ! mountpoint -q /data; then
       if ! blkid /dev/xvdf; then
@@ -76,7 +104,7 @@ locals {
     fi
 
     docker run -d --name narwal-api --restart unless-stopped \
-      -p 8080:8080 \
+      -p 127.0.0.1:8080:8080 \
       -v /data:/data \
       "$${ENV_ARGS[@]}" \
       "$${IMAGE}" || echo "Container start deferred until $${NARWAL_ENV_FILE} exists"
@@ -100,8 +128,6 @@ resource "aws_volume_attachment" "data" {
 }
 
 resource "aws_eip" "api" {
-  domain = "vpc"
-
   tags = {
     Name = "${var.project_name}-api"
   }

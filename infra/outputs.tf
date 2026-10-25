@@ -1,21 +1,11 @@
-output "cloudfront_domain_name" {
-  description = "CloudFront distribution domain (HTTPS entry point)."
-  value       = aws_cloudfront_distribution.main.domain_name
-}
-
-output "cloudfront_distribution_id" {
-  description = "CloudFront distribution ID (invalidations)."
-  value       = aws_cloudfront_distribution.main.id
-}
-
-output "ui_bucket_name" {
-  description = "S3 bucket for Vite static assets."
-  value       = aws_s3_bucket.ui.id
+output "app_public_url" {
+  description = "Public demo URL (HTTP on Elastic IP — Nginx serves UI and proxies /api/*)."
+  value       = "http://${aws_eip.api.public_ip}"
 }
 
 output "app_bucket_name" {
-  description = "S3 bucket for models and analysis objects (set S3_BUCKET to this value)."
-  value       = aws_s3_bucket.app.id
+  description = "S3 bucket for models, analysis objects, and UI deploy prefix ui/ (set S3_BUCKET on API)."
+  value       = var.app_bucket_name
 }
 
 output "ecr_repository_url" {
@@ -39,6 +29,16 @@ output "api_public_ip" {
 }
 
 output "api_elastic_ip" {
-  description = "Same as api_public_ip (stable origin for CloudFront)."
+  description = "Same as api_public_ip (stable public address)."
   value       = aws_eip.api.public_ip
+}
+
+output "api_ssh_private_key_path" {
+  description = "Generated PEM private key on disk (gitignored). Created by terraform apply."
+  value       = local_sensitive_file.api_ssh_private_key.filename
+}
+
+output "api_ssh_command" {
+  description = "Example SSH command for Amazon Linux (ec2-user)."
+  value       = "ssh -i \"${local_sensitive_file.api_ssh_private_key.filename}\" ec2-user@${aws_eip.api.public_ip}"
 }

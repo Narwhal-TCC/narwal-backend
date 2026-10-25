@@ -96,7 +96,7 @@ jobs:
               if [ -f \"$NARWAL_ENV_FILE\" ]; then
                 ENV_ARGS=(--env-file \"$NARWAL_ENV_FILE\")
               fi
-              docker run -d --name \"$CONTAINER_NAME\" --restart unless-stopped -p 8080:8080 -v /data:/data \"${{ENV_ARGS[@]}}\" \"$IMAGE\"
+              docker run -d --name \"$CONTAINER_NAME\" --restart unless-stopped -p 127.0.0.1:8080:8080 -v /data:/data \"${{ENV_ARGS[@]}}\" \"$IMAGE\"
               '''
           ).format(region=region, ecr=ecr_url, tag=tag)
           print(json.dumps({'commands': [script]}))
@@ -122,16 +122,16 @@ jobs:
             exit 1
           fi
 
-      - name: Post-deploy CloudFront health check
+      - name: Post-deploy app health check
         env:
-          CLOUDFRONT_URL: ${{ vars.CLOUDFRONT_URL }}
+          APP_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
         run: |
           set -euo pipefail
-          if [ -z "${CLOUDFRONT_URL}" ]; then
-            echo "Repository variable CLOUDFRONT_URL is required (https://d123.cloudfront.net)."
+          if [ -z "${APP_PUBLIC_URL}" ]; then
+            echo "Repository variable APP_PUBLIC_URL is required (http://<elastic-ip> from terraform output app_public_url)."
             exit 1
           fi
-          URL="${CLOUDFRONT_URL%/}/api/health"
+          URL="${APP_PUBLIC_URL%/}/api/health"
           echo "Checking ${URL} ..."
           last_code="000"
           for attempt in $(seq 1 12); do
