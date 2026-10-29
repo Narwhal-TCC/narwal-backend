@@ -172,22 +172,22 @@ jobs:
         env:
           INSTANCE_ID: ${{ steps.tf.outputs.ec2_instance_id }}
           ECR_REPOSITORY_URL: ${{ steps.tf.outputs.ecr_repository_url }}
-          APP_BUCKET_NAME: ${{ steps.tf.outputs.app_bucket_name }}
+          APP_BUCKET_NAME: ${{ secrets.APP_BUCKET_NAME }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
-          SSM_PARAMS=$(python3 -c "
+          SSM_PARAMS=$(python3 <<'PY'
           import json
           import os
           import textwrap
 
-          region = os.environ['AWS_REGION']
-          ecr_url = os.environ['ECR_REPOSITORY_URL']
-          bucket = os.environ['APP_BUCKET_NAME']
-          tag = os.environ['IMAGE_TAG']
-          ecr_registry = ecr_url.split('/', 1)[0]
+          region = os.environ["AWS_REGION"]
+          ecr_url = os.environ["ECR_REPOSITORY_URL"]
+          bucket = os.environ["APP_BUCKET_NAME"]
+          tag = os.environ["IMAGE_TAG"]
+          ecr_registry = ecr_url.split("/", 1)[0]
           script = textwrap.dedent(
-              f'''
+              f"""
               set -euo pipefail
               AWS_REGION={region}
               CONTAINER_NAME=narwal-api
@@ -208,10 +208,11 @@ jobs:
               else
                 docker run -d --name "$CONTAINER_NAME" --restart unless-stopped -p 127.0.0.1:8080:8080 -v /data:/data "$IMAGE"
               fi
-              '''
+              """
           )
-          print(json.dumps({'commands': [script]}))
-          ")
+          print(json.dumps({"commands": [script]}))
+          PY
+          )
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
