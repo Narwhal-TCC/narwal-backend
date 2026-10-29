@@ -15,13 +15,11 @@ Use **organization** secrets so **narwal-backend** and **narwal-frontend** share
 
 | Secret | Purpose |
 | ------ | ------- |
-| `EC2_SSH_PRIVATE_KEY` | PEM from `terraform apply` → `infra/keys/<project>-api.pem` (same on **narwal-backend** and **narwal-frontend**) |
-
-Set once per Terraform key rotation (instance replacement):
+| `EC2_SSH_PRIVATE_KEY` | Private PEM matching `infra/keys/narwhal-dev-keypair.pub` (same on **narwal-backend** and **narwal-frontend**) |
 
 ```powershell
-Get-Content infra\keys\narwal-api.pem -Raw | gh secret set EC2_SSH_PRIVATE_KEY -R Narwhal-TCC/narwal-backend
-Get-Content infra\keys\narwal-api.pem -Raw | gh secret set EC2_SSH_PRIVATE_KEY -R Narwhal-TCC/narwal-frontend
+Get-Content $env:USERPROFILE\Downloads\narwhal-dev-keypair.pem -Raw | gh secret set EC2_SSH_PRIVATE_KEY -R Narwhal-TCC/narwal-backend
+Get-Content $env:USERPROFILE\Downloads\narwhal-dev-keypair.pem -Raw | gh secret set EC2_SSH_PRIVATE_KEY -R Narwhal-TCC/narwal-frontend
 ```
 
 Ensure the security group allows SSH from GitHub Actions (default `ssh_allowed_cidr_blocks = ["0.0.0.0/0"]` in lab).

@@ -31,7 +31,7 @@ terraform destroy
 
 After apply, note outputs: `app_public_url`, `app_bucket_name`, `ecr_repository_url`, `api_instance_id`, `api_elastic_ip`.
 
-**SSH (optional):** `terraform apply` generates `infra/keys/<project_name>-api.pem` and registers the matching EC2 key pair. Connect with `terraform output -raw api_ssh_command`. Adding a key to an existing instance **replaces** the EC2 resource; the separate EBS `/data` volume is reattached. Prefer Session Manager if you already configured `/etc/narwal/env` and want zero downtime.
+**SSH:** EC2 uses key pair **`narwhal-dev-keypair`** (public key in `infra/keys/narwhal-dev-keypair.pub`; keep the private `.pem` local). Connect with `terraform output -raw api_ssh_command`. Changing the key **replaces** the EC2 instance; the separate EBS `/data` volume is reattached.
 
 ## S3 bucket (outside Terraform)
 

@@ -33,12 +33,12 @@ output "api_elastic_ip" {
   value       = aws_eip.api.public_ip
 }
 
-output "api_ssh_private_key_path" {
-  description = "Generated PEM private key on disk (gitignored). Created by terraform apply."
-  value       = local_sensitive_file.api_ssh_private_key.filename
+output "api_ssh_key_name" {
+  description = "EC2 key pair name attached to the API instance."
+  value       = aws_key_pair.api.key_name
 }
 
 output "api_ssh_command" {
-  description = "Example SSH command for Amazon Linux (ec2-user)."
-  value       = "ssh -i \"${local_sensitive_file.api_ssh_private_key.filename}\" ec2-user@${aws_eip.api.public_ip}"
+  description = "Example SSH command for Amazon Linux (ec2-user). Use your local private PEM matching ssh_public_key_path."
+  value       = "ssh -i \"<path-to-${var.ssh_key_name}.pem>\" ec2-user@${aws_eip.api.public_ip}"
 }

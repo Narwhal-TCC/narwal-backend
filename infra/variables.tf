@@ -33,6 +33,18 @@ variable "ssh_allowed_cidr_blocks" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "ssh_key_name" {
+  description = "Existing EC2 key pair name in AWS (public key registered via ssh_public_key_path)."
+  type        = string
+  default     = "narwhal-dev-keypair"
+}
+
+variable "ssh_public_key_path" {
+  description = "Path to OpenSSH public key file relative to infra/ (committed .pub; private PEM stays local)."
+  type        = string
+  default     = "keys/narwhal-dev-keypair.pub"
+}
+
 variable "tags" {
   description = "Default tags applied to supported resources."
   type        = map(string)
