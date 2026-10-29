@@ -9,6 +9,7 @@ from app.schemas.analysis import AiDetectionNote, Detection
 from app.services.ai_analyst import (
     CAVEAT_MAX_LEN,
     DETECTION_PAYLOAD_KEYS,
+    DISCLAIMER,
     NOTE_MAX_LEN,
     PAYLOAD_TOP_LEVEL_KEYS,
     RECOMMENDATION_MAX_LEN,
@@ -203,7 +204,7 @@ def test_analyze_ready_parses_valid_response():
     result = analyst.analyze(_context())
     assert result.status == "ready"
     assert result.reason is None
-    assert result.summary == "Resumo."
+    assert result.summary == f"Resumo. {DISCLAIMER}"
     assert result.detections[0].note == "Nota."
     assert result.model == "openai/gpt-oss-120b"
     assert result.generated_at is not None

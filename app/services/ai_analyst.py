@@ -32,40 +32,58 @@ PAYLOAD_TOP_LEVEL_KEYS = frozenset(
         "detections",
         "primary_class",
         "milco_detection_count",
+        "label_stats",
     }
 )
 DETECTION_PAYLOAD_KEYS = frozenset(
-    {"x1", "y1", "x2", "y2", "label", "confidence", "detector_score"}
+    {
+        "index",
+        "number",
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "region",
+        "area_pct",
+        "label",
+        "confidence_pct",
+    }
 )
 
+DISCLAIMER = "Esta análise é apoio à decisão e não substitui a avaliação do operador."
+
 SYSTEM_PROMPT = (
-    "Você é um assistente técnico especializado em auxílio à decisão para "
-    "operadores de detecção de minas em imagens de sonar.\n"
-    "Responda SOMENTE com um objeto JSON válido (sem blocos de código markdown) "
-    "exatamente no formato:\n"
+    "Você é um assistente técnico de apoio à decisão para operadores de detecção "
+    "de minas em imagens de sonar.\n"
+    "Responda SOMENTE com um objeto JSON válido (sem markdown) no formato:\n"
     '{"summary": str, "detections": [{"index": int, "note": str}], '
     '"recommendation": str, "caveats": [str]}\n\n'
-    "DIRETRIZES DE CONTEÚDO E FORMATAÇÃO:\n"
-    "1. Idioma e Tom: Use português do Brasil, tom factual, objetivo e direto.\n"
-    "2. Restrição de Dados: Não invente detecções ou informações que não estejam "
-    "no JSON de entrada. "
-    "Use estritamente os dados fornecidos (como confidence, model_label e "
-    "model_description).\n"
-    "3. Referência a Detecções: No texto (summary, recommendation e notes), "
-    "sempre refira-se às detecções "
-    "como 'Detecção 1', 'Detecção 2', etc. (onde o número corresponde a `index + 1`). "
-    "Inclua sempre o rótulo (`label`) e a confiança formatada em porcentagem "
-    "(ex: 91% de confiança, multiplicando o campo `confidence` por 100).\n"
-    "4. Termos Proibidos: NUNCA utilize índices baseados em 0 (0-based) no texto "
-    "legível para o ser humano. "
-    "NUNCA cite ou mencione a métrica interna `detector_score` — ela é exclusiva "
-    "do modelo; o operador "
-    "visualiza apenas a `confidence` (confiança da classificação).\n"
-    "5. Aviso Obrigatório: O `summary` deve obrigatoriamente encerrar com a frase: "
-    "'Esta análise é apoio à decisão e não substitui a avaliação do operador.'\n"
-    "6. Coerência Lógica: Ao fazer recomendações sobre pontuações (como menor "
-    "confiança ou atenção especial), "
-    "avalie corretamente os valores numéricos reais dos objetos.\n"
+    "COMO A RESPOSTA É EXIBIDA (importante para evitar repetição):\n"
+    "- A interface já mostra, acima de cada nota, o cabeçalho "
+    "'Detecção {number} · {label} · {confidence_pct}% de confiança'.\n"
+    "- O aviso de apoio à decisão é adicionado automaticamente ao summary; "
+    "não o escreva.\n\n"
+    "REGRAS DE NUMERAÇÃO:\n"
+    "- Cada detecção de entrada traz `index` (técnico) e `number` (para humanos).\n"
+    "- Em `detections[].index`, copie EXATAMENTE o `index` da detecção descrita.\n"
+    "- Em qualquer texto, use apenas 'Detecção {number}', copiando o campo "
+    "`number`. Nunca calcule números; nunca use `index` no texto.\n"
+    "- Gere no máximo uma nota por detecção, na mesma ordem da entrada.\n\n"
+    "REGRAS DE CONTEÚDO:\n"
+    "1. Português do Brasil, tom factual e direto. Use apenas dados da entrada.\n"
+    "2. `summary`: no máximo 2 frases. Visão geral (totais por rótulo em "
+    "`label_stats`, faixa de confiança). NÃO liste detecções individualmente.\n"
+    "3. `detections[].note`: NÃO repita número, rótulo nem confiança (já estão "
+    "no cabeçalho). Acrescente só informação nova: posição (`region`), tamanho "
+    "relativo (`area_pct`), comparação com as demais (ex: 'a menor confiança "
+    "entre as MILCO') e o que o operador deve observar. Máximo 1 frase.\n"
+    "4. `recommendation`: priorize ações concretas. Para afirmações como "
+    "'maior/menor confiança', use SOMENTE os valores de `label_stats` "
+    "(`lowest_number`, `highest_number`), nunca deduza.\n"
+    "5. `caveats`: no máximo 3, específicos para esta imagem (ex: detecções "
+    "abaixo de 80%, detecções muito pequenas ou próximas da borda). NÃO "
+    "repita o aviso de apoio à decisão nem frases já usadas em outros campos.\n"
+    "6. Nenhuma frase deve aparecer, com o mesmo sentido, em dois campos.\n"
 )
 
 
@@ -99,21 +117,62 @@ def _truncate(text: str, limit: int) -> str:
     return text[:limit]
 
 
+def _region(det: Detection, width: int, height: int) -> str:
+    if width <= 0 or height <= 0:
+        return "desconhecida"
+    cx = (det.x1 + det.x2) / 2 / width
+    cy = (det.y1 + det.y2) / 2 / height
+    vertical = "superior" if cy < 1 / 3 else "inferior" if cy > 2 / 3 else "central"
+    horizontal = "esquerda" if cx < 1 / 3 else "direita" if cx > 2 / 3 else "centro"
+    if vertical == "central" and horizontal == "centro":
+        return "centro"
+    return f"{vertical}-{horizontal}"
+
+
+def _area_pct(det: Detection, width: int, height: int) -> float:
+    if width <= 0 or height <= 0:
+        return 0.0
+    area = max(det.x2 - det.x1, 0) * max(det.y2 - det.y1, 0)
+    return round(100 * area / (width * height), 2)
+
+
+def _label_stats(detections: list[Detection]) -> dict[str, dict[str, Any]]:
+    stats: dict[str, dict[str, Any]] = {}
+    for i, det in enumerate(detections):
+        pct = round(det.confidence * 100)
+        entry = stats.setdefault(
+            det.label,
+            {"count": 0, "numbers": [], "lowest_number": i + 1, "lowest_pct": pct,
+             "highest_number": i + 1, "highest_pct": pct},
+        )
+        entry["count"] += 1
+        entry["numbers"].append(i + 1)
+        if pct < entry["lowest_pct"]:
+            entry["lowest_number"], entry["lowest_pct"] = i + 1, pct
+        if pct > entry["highest_pct"]:
+            entry["highest_number"], entry["highest_pct"] = i + 1, pct
+    return stats
+
+
 def build_payload(context: AnalystContext) -> dict[str, Any]:
     entry = _registry_entry(context.model_id)
     model_label = entry.label if entry is not None else context.model_id
     model_description = entry.description if entry is not None else ""
+    w, h = context.image_width, context.image_height
     detection_rows = [
         {
+            "index": i,
+            "number": i + 1,
             "x1": det.x1,
             "y1": det.y1,
             "x2": det.x2,
             "y2": det.y2,
+            "region": _region(det, w, h),
+            "area_pct": _area_pct(det, w, h),
             "label": det.label,
-            "confidence": det.confidence,
-            "detector_score": det.detector_score,
+            "confidence_pct": round(det.confidence * 100),
         }
-        for det in context.detections
+        for i, det in enumerate(context.detections)
     ]
     payload = {
         "model_id": context.model_id,
@@ -124,6 +183,7 @@ def build_payload(context: AnalystContext) -> dict[str, Any]:
         "detections": detection_rows,
         "primary_class": context.primary_class,
         "milco_detection_count": context.milco_detection_count,
+        "label_stats": _label_stats(context.detections),
     }
     assert set(payload.keys()) == PAYLOAD_TOP_LEVEL_KEYS
     for row in detection_rows:
@@ -133,15 +193,26 @@ def build_payload(context: AnalystContext) -> dict[str, Any]:
 
 def postprocess(content: LlmAnalysisContent, *, detection_count: int) -> LlmAnalysisContent:
     kept_notes: list[AiDetectionNote] = []
+    seen_indexes: set[int] = set()
     for note in content.detections:
-        if note.index < 0 or note.index >= detection_count:
+        if note.index < 0 or note.index >= detection_count or note.index in seen_indexes:
             continue
+        seen_indexes.add(note.index)
         kept_notes.append(
             AiDetectionNote(index=note.index, note=_truncate(note.note, NOTE_MAX_LEN))
         )
-    caveats = [_truncate(c, CAVEAT_MAX_LEN) for c in content.caveats[:MAX_CAVEATS]]
+    kept_notes.sort(key=lambda n: n.index)
+    disclaimer_key = DISCLAIMER.lower().rstrip(".")
+    caveats = [
+        _truncate(c, CAVEAT_MAX_LEN)
+        for c in content.caveats
+        if disclaimer_key not in c.lower()
+    ][:MAX_CAVEATS]
+    summary = content.summary.strip()
+    if disclaimer_key not in summary.lower():
+        summary = f"{summary} {DISCLAIMER}".strip()
     return LlmAnalysisContent(
-        summary=_truncate(content.summary, SUMMARY_MAX_LEN),
+        summary=_truncate(summary, SUMMARY_MAX_LEN),
         detections=kept_notes,
         recommendation=_truncate(content.recommendation, RECOMMENDATION_MAX_LEN),
         caveats=caveats,
