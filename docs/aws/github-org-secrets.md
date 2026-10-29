@@ -11,6 +11,21 @@ Use **organization** secrets so **narwal-backend** and **narwal-frontend** share
 | `AWS_SESSION_TOKEN` | Same (required for temporary keys) |
 | `APP_BUCKET_NAME` | Globally unique app bucket (`terraform apply -var app_bucket_name=…`, models, UI prefix `ui/`) |
 
+## Required on each app repo (SSH deploy — Learner Lab blocks SSM)
+
+| Secret | Purpose |
+| ------ | ------- |
+| `EC2_SSH_PRIVATE_KEY` | PEM from `terraform apply` → `infra/keys/<project>-api.pem` (same on **narwal-backend** and **narwal-frontend**) |
+
+Set once per Terraform key rotation (instance replacement):
+
+```powershell
+Get-Content infra\keys\narwal-api.pem -Raw | gh secret set EC2_SSH_PRIVATE_KEY -R Narwhal-TCC/narwal-backend
+Get-Content infra\keys\narwal-api.pem -Raw | gh secret set EC2_SSH_PRIVATE_KEY -R Narwhal-TCC/narwal-frontend
+```
+
+Ensure the security group allows SSH from GitHub Actions (default `ssh_allowed_cidr_blocks = ["0.0.0.0/0"]` in lab).
+
 ## Optional
 
 | Secret | Purpose |
@@ -24,9 +39,9 @@ Deploy workflows read **Terraform outputs** after `apply`; repository variables 
 | Repo | Workflow | Terraform | Redeploy |
 | ---- | -------- | ----------- | -------- |
 | **narwal-backend** | `ci.yml` (PR/push) | `validate` only | — |
-| **narwal-backend** | `deploy-aws.yml` | `init` + `apply` | ECR + SSM + `/api/health` |
+| **narwal-backend** | `deploy-aws.yml` | `init` + `apply` | ECR + SSH + `/api/health` |
 | **narwal-frontend** | `ci.yml` | — | `npm test` only |
-| **narwal-frontend** | `deploy-aws.yml` | `apply` (backend `infra/` checkout) | S3 `ui/` + SSM + GET `/` |
+| **narwal-frontend** | `deploy-aws.yml` | `apply` (backend `infra/` checkout) | S3 `ui/` + SSH + GET `/` |
 
 Both deploy workflows support **workflow_dispatch** with **deploy_only** to skip Terraform and redeploy the app only.
 
@@ -76,7 +91,7 @@ The API reads **`/etc/narwal/env` on EC2** (not from git). Recommended pattern:
 
    Object: **`s3://<APP_BUCKET_NAME>/config/narwal.env`**
 
-3. Each **backend deploy** SSM step pulls that object to `/etc/narwal/env` (if present), then restarts Docker.
+3. Each **backend deploy** SSH step pulls that object to `/etc/narwal/env` (if present), then restarts Docker.
 
 To refresh env after edits, re-upload and run deploy with **`deploy_only: true`**.
 

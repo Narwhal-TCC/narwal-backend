@@ -12,11 +12,13 @@ on:
       - "docker-entrypoint.sh"
       - "pyproject.toml"
       - "scripts/aws/create-app-bucket.sh"
+      - "scripts/aws/deploy-api-via-ssh.sh"
+      - "scripts/aws/ec2-api-bootstrap.sh"
       - ".github/workflows/deploy-aws.yml"
   workflow_dispatch:
     inputs:
       deploy_only:
-        description: "Skip Terraform; rebuild/push API image and SSM restart only"
+        description: "Skip Terraform; rebuild/push API image and SSH restart only"
         required: false
         default: false
         type: boolean
@@ -37,7 +39,7 @@ jobs:
       ecr_repository_url: ${{ steps.export.outputs.ecr_repository_url }}
       ec2_instance_id: ${{ steps.export.outputs.ec2_instance_id }}
       app_public_url: ${{ steps.export.outputs.app_public_url }}
-      app_bucket_name: ${{ steps.export.outputs.app_bucket_name }}
+      api_public_ip: ${{ steps.export.outputs.api_public_ip }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -100,7 +102,7 @@ jobs:
           echo "ecr_repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
           echo "ec2_instance_id=$(terraform -chdir=infra output -raw api_instance_id)" >> "$GITHUB_OUTPUT"
           echo "app_public_url=$(terraform -chdir=infra output -raw app_public_url)" >> "$GITHUB_OUTPUT"
-          echo "app_bucket_name=$(terraform -chdir=infra output -raw app_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "api_public_ip=$(terraform -chdir=infra output -raw api_public_ip)" >> "$GITHUB_OUTPUT"
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -134,7 +136,7 @@ jobs:
             echo "ecr_repository_url=${{ needs.provisioning.outputs.ecr_repository_url }}" >> "$GITHUB_OUTPUT"
             echo "ec2_instance_id=${{ needs.provisioning.outputs.ec2_instance_id }}" >> "$GITHUB_OUTPUT"
             echo "app_public_url=${{ needs.provisioning.outputs.app_public_url }}" >> "$GITHUB_OUTPUT"
-            echo "app_bucket_name=${{ needs.provisioning.outputs.app_bucket_name }}" >> "$GITHUB_OUTPUT"
+            echo "api_public_ip=${{ needs.provisioning.outputs.api_public_ip }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           STATE_BUCKET="${{ secrets.STATE_BUCKET_NAME || secrets.APP_BUCKET_NAME }}"
@@ -148,7 +150,7 @@ jobs:
           echo "ecr_repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
           echo "ec2_instance_id=$(terraform -chdir=infra output -raw api_instance_id)" >> "$GITHUB_OUTPUT"
           echo "app_public_url=$(terraform -chdir=infra output -raw app_public_url)" >> "$GITHUB_OUTPUT"
-          echo "app_bucket_name=$(terraform -chdir=infra output -raw app_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "api_public_ip=$(terraform -chdir=infra output -raw api_public_ip)" >> "$GITHUB_OUTPUT"
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -168,69 +170,20 @@ jobs:
           docker push "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
           docker push "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
 
-      - name: Restart API on EC2 via SSM
+      - name: Restart API on EC2 via SSH
         env:
-          INSTANCE_ID: ${{ steps.tf.outputs.ec2_instance_id }}
+          EC2_HOST: ${{ steps.tf.outputs.api_public_ip }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           ECR_REPOSITORY_URL: ${{ steps.tf.outputs.ecr_repository_url }}
           APP_BUCKET_NAME: ${{ secrets.APP_BUCKET_NAME }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
-          SSM_PARAMS=$(python3 <<'PY'
-          import json
-          import os
-          import textwrap
-
-          region = os.environ["AWS_REGION"]
-          ecr_url = os.environ["ECR_REPOSITORY_URL"]
-          bucket = os.environ["APP_BUCKET_NAME"]
-          tag = os.environ["IMAGE_TAG"]
-          ecr_registry = ecr_url.split("/", 1)[0]
-          script = textwrap.dedent(
-              f"""
-              set -euo pipefail
-              AWS_REGION={region}
-              CONTAINER_NAME=narwal-api
-              NARWAL_ENV_FILE=/etc/narwal/env
-              mkdir -p /etc/narwal
-              if aws s3 cp "s3://{bucket}/config/narwal.env" "$NARWAL_ENV_FILE" 2>/dev/null; then
-                chmod 600 "$NARWAL_ENV_FILE"
-              fi
-              aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "{ecr_registry}"
-              IMAGE="{ecr_url}:{tag}"
-              docker pull "$IMAGE"
-              if docker ps -a --format '{{{{.Names}}}}' | grep -qx "$CONTAINER_NAME"; then
-                docker stop "$CONTAINER_NAME" || true
-                docker rm "$CONTAINER_NAME" || true
-              fi
-              if [ -f "$NARWAL_ENV_FILE" ]; then
-                docker run -d --name "$CONTAINER_NAME" --restart unless-stopped -p 127.0.0.1:8080:8080 -v /data:/data --env-file "$NARWAL_ENV_FILE" "$IMAGE"
-              else
-                docker run -d --name "$CONTAINER_NAME" --restart unless-stopped -p 127.0.0.1:8080:8080 -v /data:/data "$IMAGE"
-              fi
-              """
-          )
-          print(json.dumps({"commands": [script]}))
-          PY
-          )
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${INSTANCE_ID}" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Narwal API deploy ${IMAGE_TAG}" \
-            --parameters "${SSM_PARAMS}" \
-            --query "Command.CommandId" --output text)
-          aws ssm wait command-executed --command-id "${COMMAND_ID}" --instance-id "${INSTANCE_ID}"
-          STATUS=$(aws ssm get-command-invocation \
-            --command-id "${COMMAND_ID}" \
-            --instance-id "${INSTANCE_ID}" \
-            --query "Status" --output text)
-          if [ "${STATUS}" != "Success" ]; then
-            aws ssm get-command-invocation \
-              --command-id "${COMMAND_ID}" \
-              --instance-id "${INSTANCE_ID}" \
-              --query "[StandardOutputContent, StandardErrorContent]" --output text >&2
+          if [ -z "${EC2_SSH_PRIVATE_KEY}" ]; then
+            echo "Repository secret EC2_SSH_PRIVATE_KEY is required (PEM from terraform output api_ssh_private_key_path)." >&2
             exit 1
           fi
+          bash scripts/aws/deploy-api-via-ssh.sh
 
       - name: Post-deploy app health check
         env:

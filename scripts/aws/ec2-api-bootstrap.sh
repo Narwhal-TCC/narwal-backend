@@ -17,6 +17,13 @@ IMAGE_TAG="${IMAGE_TAG:-latest}"
 NARWAL_ENV_FILE="${NARWAL_ENV_FILE:-/etc/narwal/env}"
 CONTAINER_NAME="${CONTAINER_NAME:-narwal-api}"
 
+if [[ -n "${APP_BUCKET_NAME:-}" ]]; then
+  sudo mkdir -p "$(dirname "${NARWAL_ENV_FILE}")"
+  if sudo aws s3 cp "s3://${APP_BUCKET_NAME}/config/narwal.env" "${NARWAL_ENV_FILE}" 2>/dev/null; then
+    sudo chmod 600 "${NARWAL_ENV_FILE}"
+  fi
+fi
+
 if [[ -z "${ECR_REPOSITORY_URL:-}" ]]; then
   echo "ECR_REPOSITORY_URL is required" >&2
   exit 1

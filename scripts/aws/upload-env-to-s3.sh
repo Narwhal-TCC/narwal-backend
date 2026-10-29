@@ -9,7 +9,7 @@
 #   Git Bash on Windows does not see PowerShell $env:APP_BUCKET_NAME — prefix on the command or rely on S3_BUCKET in the file.
 #
 # Object key: s3://${APP_BUCKET_NAME}/config/narwal.env
-# Backend deploy workflow can pull this to /etc/narwal/env via SSM (see deploy-aws.yml).
+# Backend deploy workflow can pull this to /etc/narwal/env via SSH (see deploy-aws.yml).
 
 set -euo pipefail
 

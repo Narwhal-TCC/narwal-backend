@@ -19,7 +19,7 @@ output "ecr_repository_name" {
 }
 
 output "api_instance_id" {
-  description = "EC2 instance ID for SSM deploy commands."
+  description = "EC2 instance ID (console / debugging)."
   value       = aws_instance.api.id
 }
 
