@@ -29,7 +29,14 @@ CONTAINER_NAME="${CONTAINER_NAME:-narwal-api}"
 if [[ -n "${APP_BUCKET_NAME:-}" ]]; then
   sudo mkdir -p "$(dirname "${NARWAL_ENV_FILE}")"
   if sudo aws s3 cp "s3://${APP_BUCKET_NAME}/config/narwal.env" "${NARWAL_ENV_FILE}" 2>/dev/null; then
-    sudo chmod 600 "${NARWAL_ENV_FILE}"
+    # ec2-user may run docker directly (docker group); must read env for --env-file.
+    if getent group docker >/dev/null 2>&1; then
+      sudo chown root:docker "${NARWAL_ENV_FILE}"
+      sudo chmod 640 "${NARWAL_ENV_FILE}"
+    else
+      sudo chown root:ec2-user "${NARWAL_ENV_FILE}"
+      sudo chmod 600 "${NARWAL_ENV_FILE}"
+    fi
   fi
 fi
 
