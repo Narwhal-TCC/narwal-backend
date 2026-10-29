@@ -47,12 +47,13 @@ HTML
   chown "${OWNER}:${OWNER}" "${DOCROOT}/index.html"
 fi
 
-install -m 644 "${SCRIPT_DIR}/narwal-nginx.conf" "${NGINX_DROPIN}"
-
 if [[ -d /etc/nginx/sites-available ]]; then
+  rm -f "${NGINX_DROPIN}"
   install -m 644 "${SCRIPT_DIR}/narwal-nginx.conf" "${NGINX_SITE}"
   rm -f /etc/nginx/sites-enabled/default
   ln -sf "${NGINX_SITE}" "${NGINX_ENABLED}"
+else
+  install -m 644 "${SCRIPT_DIR}/narwal-nginx.conf" "${NGINX_DROPIN}"
 fi
 
 nginx -t

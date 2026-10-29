@@ -12,12 +12,16 @@ usermod -aG docker ubuntu || true
 mkdir -p /var/www/narwal
 chown -R www-data:www-data /var/www/narwal
 
-cat > /etc/nginx/conf.d/narwal.conf <<'NGINX_EOF'
+if [[ -d /etc/nginx/sites-available ]]; then
+  cat > /etc/nginx/sites-available/narwal.conf <<'NGINX_EOF'
 ${nginx_conf}
 NGINX_EOF
-
-if [[ -d /etc/nginx/sites-enabled ]]; then
   rm -f /etc/nginx/sites-enabled/default
+  ln -sf /etc/nginx/sites-available/narwal.conf /etc/nginx/sites-enabled/narwal.conf
+else
+  cat > /etc/nginx/conf.d/narwal.conf <<'NGINX_EOF'
+${nginx_conf}
+NGINX_EOF
 fi
 
 cat > /var/www/narwal/index.html <<'HTML_EOF'
