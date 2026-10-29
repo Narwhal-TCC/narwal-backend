@@ -12,6 +12,15 @@
 
 set -euo pipefail
 
+# User-data runs as root; GitHub Actions deploy SSHs as ec2-user (not in docker group by default).
+run_docker() {
+  if [[ "$(id -u)" -eq 0 ]] || docker info >/dev/null 2>&1; then
+    docker "$@"
+  else
+    sudo docker "$@"
+  fi
+}
+
 AWS_REGION="${AWS_REGION:-us-east-1}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 NARWAL_ENV_FILE="${NARWAL_ENV_FILE:-/etc/narwal/env}"
@@ -31,21 +40,22 @@ fi
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Installing Docker..."
-  dnf install -y docker
-  systemctl enable --now docker
+  sudo dnf install -y docker
+  sudo systemctl enable --now docker
+  sudo usermod -aG docker ec2-user 2>/dev/null || true
 fi
 
 ECR_REGISTRY="${ECR_REPOSITORY_URL%%/*}"
 aws ecr get-login-password --region "${AWS_REGION}" \
-  | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+  | run_docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 
 IMAGE="${ECR_REPOSITORY_URL}:${IMAGE_TAG}"
 
-docker pull "${IMAGE}"
+run_docker pull "${IMAGE}"
 
-if docker ps -a --format '{{.Names}}' | grep -qx "${CONTAINER_NAME}"; then
-  docker stop "${CONTAINER_NAME}" >/dev/null 2>&1 || true
-  docker rm "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+if run_docker ps -a --format '{{.Names}}' | grep -qx "${CONTAINER_NAME}"; then
+  run_docker stop "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+  run_docker rm "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 fi
 
 ENV_FILE_ARGS=()
@@ -55,7 +65,7 @@ else
   echo "Warning: ${NARWAL_ENV_FILE} not found; container may lack app config" >&2
 fi
 
-docker run -d \
+run_docker run -d \
   --name "${CONTAINER_NAME}" \
   --restart unless-stopped \
   -p 127.0.0.1:8080:8080 \

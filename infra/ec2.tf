@@ -43,6 +43,7 @@ locals {
 
     dnf install -y docker nginx aws-cli
     systemctl enable --now docker
+    usermod -aG docker ec2-user
 
     mkdir -p /var/www/narwal
     chown -R nginx:nginx /var/www/narwal
