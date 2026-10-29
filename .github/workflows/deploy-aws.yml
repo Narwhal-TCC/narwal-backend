@@ -1,25 +1,43 @@
+# AWS: org secrets AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, APP_BUCKET_NAME, STATE_BUCKET_NAME.
+# See docs/aws/github-org-secrets.md
 name: Deploy backend (AWS)
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
     paths:
       - "app/**"
+      - "infra/**"
       - "Dockerfile"
       - "docker-entrypoint.sh"
       - "pyproject.toml"
+      - "scripts/aws/create-app-bucket.sh"
       - ".github/workflows/deploy-aws.yml"
   workflow_dispatch:
+    inputs:
+      deploy_only:
+        description: "Skip Terraform; rebuild/push API image and SSM restart only"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  TF_VERSION: "1.9.8"
 
 jobs:
-  build-and-push:
+  provisioning:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_only != true }}
     runs-on: ubuntu-latest
+    outputs:
+      ecr_repository: ${{ steps.export.outputs.ecr_repository }}
+      ecr_repository_url: ${{ steps.export.outputs.ecr_repository_url }}
+      ec2_instance_id: ${{ steps.export.outputs.ec2_instance_id }}
+      app_public_url: ${{ steps.export.outputs.app_public_url }}
+      app_bucket_name: ${{ steps.export.outputs.app_bucket_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,6 +50,106 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Ensure app S3 bucket exists
+        env:
+          APP_BUCKET_NAME: ${{ secrets.APP_BUCKET_NAME }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_BUCKET_NAME}" ]; then
+            echo "Organization secret APP_BUCKET_NAME is required (globally unique app bucket)." >&2
+            exit 1
+          fi
+          bash scripts/aws/create-app-bucket.sh
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure Terraform backend
+        env:
+          STATE_BUCKET: ${{ secrets.STATE_BUCKET_NAME != '' && secrets.STATE_BUCKET_NAME || secrets.APP_BUCKET_NAME }}
+        run: |
+          set -euo pipefail
+          if [ -z "${STATE_BUCKET}" ]; then
+            echo "Organization secret STATE_BUCKET_NAME or APP_BUCKET_NAME is required for remote state." >&2
+            exit 1
+          fi
+          cat > infra/backend.hcl <<EOF
+          bucket = "${STATE_BUCKET}"
+          key    = "terraform/narwal-app/state.tfstate"
+          region = "${{ env.AWS_REGION }}"
+          EOF
+
+      - name: Terraform init and apply
+        env:
+          APP_BUCKET_NAME: ${{ secrets.APP_BUCKET_NAME }}
+        run: |
+          set -euo pipefail
+          terraform -chdir=infra init -backend-config=backend.hcl
+          terraform -chdir=infra apply -auto-approve \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="app_bucket_name=${APP_BUCKET_NAME}"
+
+      - name: Export Terraform outputs
+        id: export
+        run: |
+          set -euo pipefail
+          echo "ecr_repository=$(terraform -chdir=infra output -raw ecr_repository_name)" >> "$GITHUB_OUTPUT"
+          echo "ecr_repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+          echo "ec2_instance_id=$(terraform -chdir=infra output -raw api_instance_id)" >> "$GITHUB_OUTPUT"
+          echo "app_public_url=$(terraform -chdir=infra output -raw app_public_url)" >> "$GITHUB_OUTPUT"
+          echo "app_bucket_name=$(terraform -chdir=infra output -raw app_bucket_name)" >> "$GITHUB_OUTPUT"
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: provisioning
+    if: always() && !cancelled() && (needs.provisioning.result == 'success' || needs.provisioning.result == 'skipped')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform (redeploy only)
+        if: needs.provisioning.result == 'skipped'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Resolve Terraform outputs
+        id: tf
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.provisioning.result }}" = "success" ]; then
+            echo "ecr_repository=${{ needs.provisioning.outputs.ecr_repository }}" >> "$GITHUB_OUTPUT"
+            echo "ecr_repository_url=${{ needs.provisioning.outputs.ecr_repository_url }}" >> "$GITHUB_OUTPUT"
+            echo "ec2_instance_id=${{ needs.provisioning.outputs.ec2_instance_id }}" >> "$GITHUB_OUTPUT"
+            echo "app_public_url=${{ needs.provisioning.outputs.app_public_url }}" >> "$GITHUB_OUTPUT"
+            echo "app_bucket_name=${{ needs.provisioning.outputs.app_bucket_name }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          STATE_BUCKET="${{ secrets.STATE_BUCKET_NAME != '' && secrets.STATE_BUCKET_NAME || secrets.APP_BUCKET_NAME }}"
+          cat > infra/backend.hcl <<EOF
+          bucket = "${STATE_BUCKET}"
+          key    = "terraform/narwal-app/state.tfstate"
+          region = "${{ env.AWS_REGION }}"
+          EOF
+          terraform -chdir=infra init -backend-config=backend.hcl
+          echo "ecr_repository=$(terraform -chdir=infra output -raw ecr_repository_name)" >> "$GITHUB_OUTPUT"
+          echo "ecr_repository_url=$(terraform -chdir=infra output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+          echo "ec2_instance_id=$(terraform -chdir=infra output -raw api_instance_id)" >> "$GITHUB_OUTPUT"
+          echo "app_public_url=$(terraform -chdir=infra output -raw app_public_url)" >> "$GITHUB_OUTPUT"
+          echo "app_bucket_name=$(terraform -chdir=infra output -raw app_bucket_name)" >> "$GITHUB_OUTPUT"
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -39,13 +157,10 @@ jobs:
       - name: Build and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          ECR_REPOSITORY: ${{ steps.tf.outputs.ecr_repository }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          if [ -z "${ECR_REPOSITORY}" ]; then
-            echo "Repository variable ECR_REPOSITORY is required (Terraform output ecr_repository_name)."
-            exit 1
-          fi
+          set -euo pipefail
           docker build \
             -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" \
             -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest" \
@@ -55,19 +170,12 @@ jobs:
 
       - name: Restart API on EC2 via SSM
         env:
-          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
-          ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
+          INSTANCE_ID: ${{ steps.tf.outputs.ec2_instance_id }}
+          ECR_REPOSITORY_URL: ${{ steps.tf.outputs.ecr_repository_url }}
+          APP_BUCKET_NAME: ${{ steps.tf.outputs.app_bucket_name }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if [ -z "${INSTANCE_ID}" ]; then
-            echo "Repository variable EC2_INSTANCE_ID is required (Terraform output api_instance_id)."
-            exit 1
-          fi
-          if [ -z "${ECR_REPOSITORY_URL}" ]; then
-            echo "Repository variable ECR_REPOSITORY_URL is required (Terraform output ecr_repository_url)."
-            exit 1
-          fi
           SSM_PARAMS=$(python3 -c "
           import json
           import os
@@ -75,15 +183,21 @@ jobs:
 
           region = os.environ['AWS_REGION']
           ecr_url = os.environ['ECR_REPOSITORY_URL']
+          bucket = os.environ['APP_BUCKET_NAME']
           tag = os.environ['IMAGE_TAG']
           script = textwrap.dedent(
               '''
               set -euo pipefail
               AWS_REGION={region}
               ECR_REPOSITORY_URL={ecr}
+              APP_BUCKET={bucket}
               IMAGE_TAG={tag}
               CONTAINER_NAME=narwal-api
               NARWAL_ENV_FILE=/etc/narwal/env
+              mkdir -p /etc/narwal
+              if aws s3 cp \"s3://${{APP_BUCKET}}/config/narwal.env\" \"$NARWAL_ENV_FILE\" 2>/dev/null; then
+                chmod 600 \"$NARWAL_ENV_FILE\"
+              fi
               ECR_REGISTRY=\"${{ECR_REPOSITORY_URL%%/*}}\"
               aws ecr get-login-password --region \"$AWS_REGION\" | docker login --username AWS --password-stdin \"$ECR_REGISTRY\"
               IMAGE=\"${{ECR_REPOSITORY_URL}}:${{IMAGE_TAG}}\"
@@ -98,7 +212,7 @@ jobs:
               fi
               docker run -d --name \"$CONTAINER_NAME\" --restart unless-stopped -p 127.0.0.1:8080:8080 -v /data:/data \"${{ENV_ARGS[@]}}\" \"$IMAGE\"
               '''
-          ).format(region=region, ecr=ecr_url, tag=tag)
+          ).format(region=region, ecr=ecr_url, bucket=bucket, tag=tag)
           print(json.dumps({'commands': [script]}))
           ")
           COMMAND_ID=$(aws ssm send-command \
@@ -107,14 +221,12 @@ jobs:
             --comment "Narwal API deploy ${IMAGE_TAG}" \
             --parameters "${SSM_PARAMS}" \
             --query "Command.CommandId" --output text)
-          echo "SSM command id: ${COMMAND_ID}"
           aws ssm wait command-executed --command-id "${COMMAND_ID}" --instance-id "${INSTANCE_ID}"
           STATUS=$(aws ssm get-command-invocation \
             --command-id "${COMMAND_ID}" \
             --instance-id "${INSTANCE_ID}" \
             --query "Status" --output text)
           if [ "${STATUS}" != "Success" ]; then
-            echo "SSM deploy failed with status ${STATUS}" >&2
             aws ssm get-command-invocation \
               --command-id "${COMMAND_ID}" \
               --instance-id "${INSTANCE_ID}" \
@@ -124,16 +236,10 @@ jobs:
 
       - name: Post-deploy app health check
         env:
-          APP_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
+          APP_PUBLIC_URL: ${{ steps.tf.outputs.app_public_url }}
         run: |
           set -euo pipefail
-          if [ -z "${APP_PUBLIC_URL}" ]; then
-            echo "Repository variable APP_PUBLIC_URL is required (http://<elastic-ip> from terraform output app_public_url)."
-            exit 1
-          fi
           URL="${APP_PUBLIC_URL%/}/api/health"
-          echo "Checking ${URL} ..."
-          last_code="000"
           for attempt in $(seq 1 12); do
             last_code=$(curl -sS -o /tmp/narwal-deploy-health.txt -w '%{http_code}' "${URL}" || echo "000")
             if [ "${last_code}" = "200" ]; then
@@ -143,7 +249,5 @@ jobs:
             echo "Attempt ${attempt}/12: HTTP ${last_code}"
             sleep 15
           done
-          echo "Post-deploy health check failed (last HTTP ${last_code})." >&2
-          echo "If the UI loads but /api fails, the EC2 instance may be stopped or Docker may be down." >&2
           cat /tmp/narwal-deploy-health.txt >&2 || true
           exit 1

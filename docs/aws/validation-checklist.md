@@ -262,45 +262,27 @@ aws ssm send-command \
 
 ---
 
-## Part 6 — GitHub Actions secrets and variables (one-time per lab rotation)
+## Part 6 — GitHub Actions (org secrets + deploy pipelines)
 
-Configure **both** repositories when lab session keys change.
+Configure **organization** secrets on **Narwhal-TCC** (both repos need access). See [github-org-secrets.md](./github-org-secrets.md).
 
-### Shared secrets (backend + frontend)
+| Org secret | Value |
+| ---------- | ----- |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` | Start Lab |
+| `APP_BUCKET_NAME` | Same as local `app_bucket_name` (pre-create bucket once) |
+| `STATE_BUCKET_NAME` | Optional; defaults to `APP_BUCKET_NAME` for remote Terraform state |
 
-| Secret | Value |
-| ------ | ----- |
-| `AWS_ACCESS_KEY_ID` | From Start Lab |
-| `AWS_SECRET_ACCESS_KEY` | From Start Lab |
-| `AWS_SESSION_TOKEN` | From Start Lab (required) |
+**Deploy workflows** (`deploy-aws.yml` in backend and frontend) run **`terraform apply`** then redeploy (API or UI). Outputs are read from state — **repository variables are optional** for CI (still useful for manual deploys).
 
-### narwal-backend — repository variables
-
-| Variable | Source |
-| -------- | ------ |
-| `AWS_REGION` | `us-east-1` |
-| `ECR_REPOSITORY` | `terraform output -raw ecr_repository_name` |
-| `ECR_REPOSITORY_URL` | `terraform output -raw ecr_repository_url` |
-| `EC2_INSTANCE_ID` | `terraform output -raw api_instance_id` |
-| `APP_PUBLIC_URL` | `terraform output -raw app_public_url` |
-
-Workflows: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/deploy-aws.yml`](../../.github/workflows/deploy-aws.yml).
-
-### narwal-frontend — repository variables
-
-| Variable | Source |
-| -------- | ------ |
-| `AWS_REGION` | `us-east-1` |
-| `APP_S3_BUCKET` | `terraform output -raw app_bucket_name` |
-| `EC2_INSTANCE_ID` | `terraform output -raw api_instance_id` |
+Optional repo variable: `AWS_REGION` = `us-east-1`.
 
 | Pass? | Step |
 | ----- | ---- |
-| ☐ | All secrets set on both repos |
-| ☐ | All variables set from Terraform outputs |
-| ☐ | Backend **CI** workflow green on latest push |
-| ☐ | Backend **deploy** workflow green (or manual Part 4B done) |
-| ☐ | Frontend **deploy** workflow green (or manual Part 5B done) |
+| ☐ | Org secrets set; lab keys rotated after each Start Lab |
+| ☐ | Backend **CI** green on PR/push (`ci.yml` — validate, no apply) |
+| ☐ | Backend **deploy** green (`deploy-aws.yml` — apply + ECR + health) |
+| ☐ | Frontend **CI** green (`ci.yml`) |
+| ☐ | Frontend **deploy** green (`deploy-aws.yml` — apply + S3 + UI smoke) |
 
 ---
 

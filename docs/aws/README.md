@@ -12,6 +12,8 @@ Documentation for deploying Narwal to **AWS Academy Learner Lab**, aligned with 
 | [cost-analysis.md](./cost-analysis.md) | TCC report, budget | Monthly scenarios, EC2 hours vs 24/7 |
 | [learner-lab-operations.md](./learner-lab-operations.md) | Developers | Start Lab, smoke tests, ECR, sizing |
 | [validation-checklist.md](./validation-checklist.md) | **Start here** | Full deploy checklist: prerequisites, Terraform, EC2, S3 models, CI, smoke commands, P1 browser sign-off |
+| [infrastructure-repo-discoveries.md](./infrastructure-repo-discoveries.md) | Infra / DevOps | Lab notes: destroy/apply of `infrastructure-repo` vs Narwal `infra/`, SCP/S3/ECR patterns |
+| [github-org-secrets.md](./github-org-secrets.md) | CI / org admin | Shared Learner Lab AWS secrets for backend + frontend |
 
 **Implementation status:** Terraform (`infra/`), backend and frontend GitHub Actions deploy workflows, and AWS docs are **implemented** on `master`. Complete P1 sign-off in Learner Lab using [validation-checklist.md](./validation-checklist.md).
 
