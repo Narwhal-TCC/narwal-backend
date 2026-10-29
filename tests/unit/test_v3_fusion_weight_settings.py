@@ -33,6 +33,7 @@ def test_seed_v3_uploads_yolo_and_classifier(tmp_path, monkeypatch):
             return True
 
     seed_v3_fusion_model_artifacts(CountingStore())
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert calls[0][1] == "s3://narwal/models/v2/yolo_a_best.pt"
     assert calls[1][1] == "s3://narwal/models/v3/fusao_edgenext_small_best.pt"
+    assert calls[2][1] == "s3://narwal/models/v3/clf_fusao_mobilevitv2_100_s42.pt"

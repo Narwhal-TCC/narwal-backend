@@ -47,6 +47,14 @@ EXPECTED_CATALOG = {
             ),
             "is_default": False,
         },
+        {
+            "id": "yolo-fusion-mobilevit",
+            "label": "YOLO A + fusão ConvNeXt/MobileViTv2",
+            "description": (
+                "Mesmo detector da v3, com classificador ConvNeXt + MobileViTv2 nos recortes."
+            ),
+            "is_default": False,
+        },
     ]
 }
 

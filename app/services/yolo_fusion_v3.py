@@ -9,6 +9,7 @@ from app.core.errors import ModelUnavailableError
 from app.repositories.s3_store import S3ObjectStore
 from app.services.yolo_convnext import default_yolo_builder
 from app.services.yolo_fusion_v3_models import (
+    FUSION_MOBILEVIT_BACKBONE_NAMES,
     FUSION_V3_CLASS_NAMES,
     FUSION_V3_IMG_SIZE,
     build_crop_fusion_classifier,
@@ -18,7 +19,7 @@ YoloBuilder = Callable[[bytes], Any]
 ClassifierBuilder = Callable[[bytes], Any]
 
 
-def default_fusion_v3_classifier_builder(payload: bytes) -> Any:
+def _load_fusion_state(payload: bytes) -> dict[str, Any]:
     torch = _import_torch()
     import io
 
@@ -27,8 +28,18 @@ def default_fusion_v3_classifier_builder(payload: bytes) -> Any:
     except TypeError:
         state = torch.load(io.BytesIO(payload), map_location="cpu")
     if not isinstance(state, dict):
-        raise ModelUnavailableError("Fusion v3 classifier artifact could not be loaded")
-    return build_crop_fusion_classifier(state)
+        raise ModelUnavailableError("Fusion classifier artifact could not be loaded")
+    return state
+
+
+def default_fusion_v3_classifier_builder(payload: bytes) -> Any:
+    return build_crop_fusion_classifier(_load_fusion_state(payload))
+
+
+def mobilevit_fusion_classifier_builder(payload: bytes) -> Any:
+    return build_crop_fusion_classifier(
+        _load_fusion_state(payload), FUSION_MOBILEVIT_BACKBONE_NAMES
+    )
 
 
 def _import_torch():
@@ -40,7 +51,7 @@ def _import_torch():
 
 
 class YoloFusionV3Weights:
-    """YOLO Model A + fusao_edgenext_small crop classifier (main branch notebooks)."""
+    """YOLO Model A + crop fusion classifier (defaults to fusao_edgenext_small)."""
 
     def __init__(
         self,
@@ -48,8 +59,12 @@ class YoloFusionV3Weights:
         *,
         yolo_builder: YoloBuilder | None = None,
         classifier_builder: ClassifierBuilder | None = None,
+        classifier_s3_uri: Callable[[], str] | None = None,
     ) -> None:
         self.store = store or S3ObjectStore()
+        self._classifier_s3_uri = classifier_s3_uri or (
+            lambda: get_settings().yolo_fusion_v3_classifier_s3_uri
+        )
         self._yolo_builder = yolo_builder or default_yolo_builder
         self._classifier_builder = classifier_builder or default_fusion_v3_classifier_builder
         self._lock = threading.Lock()
@@ -80,7 +95,7 @@ class YoloFusionV3Weights:
     def _load_all(self) -> None:
         settings = get_settings()
         yolo_bytes = self.store.download_model(settings.yolo_a_s3_uri)
-        classifier_bytes = self.store.download_model(settings.yolo_fusion_v3_classifier_s3_uri)
+        classifier_bytes = self.store.download_model(self._classifier_s3_uri())
         self.yolo = self._yolo_builder(yolo_bytes)
         self.classifier = self._classifier_builder(classifier_bytes)
 

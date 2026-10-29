@@ -9,14 +9,15 @@ from app.services.model_registry import (
 )
 
 
-def test_registry_lists_four_models_in_catalog_order():
+def test_registry_lists_five_models_in_catalog_order():
     models = list_models()
-    assert len(models) == 4
+    assert len(models) == 5
     assert [entry.id for entry in models] == [
         "yolo-convnext-balanced",
         "yolo-convnext-recall",
         "two-stage-pt",
         "yolo-fusion-v3",
+        "yolo-fusion-mobilevit",
     ]
     balanced = models[0]
     assert balanced.label == "YOLO + ConvNeXt (equilibrado)"
@@ -44,6 +45,7 @@ def test_default_model_id_is_balanced_pipeline():
         ("yolo-convnext-recall", "yolo-convnext-recall"),
         ("two-stage-pt", "two-stage-pt"),
         ("yolo-fusion-v3", "yolo-fusion-v3"),
+        ("yolo-fusion-mobilevit", "yolo-fusion-mobilevit"),
     ],
 )
 def test_resolve_model_id_accepts_default_and_exact_id(raw, expected):

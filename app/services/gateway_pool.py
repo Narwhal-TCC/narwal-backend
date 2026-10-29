@@ -4,16 +4,22 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from app.core.config import get_settings
 from app.repositories.s3_store import S3ObjectStore
 from app.services.model_gateway import ModelGateway, TwoStageTorchGateway
 from app.services.model_registry import DEFAULT_MODEL_ID
 from app.services.yolo_convnext import YoloConvnextGateway, YoloConvnextWeights
-from app.services.yolo_fusion_v3 import YoloFusionV3Gateway, YoloFusionV3Weights
+from app.services.yolo_fusion_v3 import (
+    YoloFusionV3Gateway,
+    YoloFusionV3Weights,
+    mobilevit_fusion_classifier_builder,
+)
 
 YOLO_BALANCED_ID = "yolo-convnext-balanced"
 YOLO_RECALL_ID = "yolo-convnext-recall"
 TWO_STAGE_ID = "two-stage-pt"
 YOLO_FUSION_V3_ID = "yolo-fusion-v3"
+YOLO_FUSION_MOBILEVIT_ID = "yolo-fusion-mobilevit"
 
 FUSION_CONF_BY_ID = {
     YOLO_BALANCED_ID: 0.4,
@@ -75,6 +81,13 @@ class GatewayPool:
             return YoloConvnextGateway(self._shared_yolo_weights(), fusion_conf)
         if model_id == YOLO_FUSION_V3_ID:
             return YoloFusionV3Gateway(self._shared_fusion_v3_weights())
+        if model_id == YOLO_FUSION_MOBILEVIT_ID:
+            weights = YoloFusionV3Weights(
+                self._store,
+                classifier_builder=mobilevit_fusion_classifier_builder,
+                classifier_s3_uri=lambda: get_settings().yolo_fusion_mobilevit_classifier_s3_uri,
+            )
+            return YoloFusionV3Gateway(weights)
         raise KeyError(f"Unregistered model id: {model_id}")
 
     def preload_default(self) -> Any:

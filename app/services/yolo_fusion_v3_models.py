@@ -9,6 +9,7 @@ FUSION_V3_IMG_SIZE = 224
 FUSION_V3_CLASS_NAMES = ("MILCO", "NOMBO")
 # MODO_FINAL=auto in the 3-parceiros notebook (best validation AUC among the three fusions).
 FUSION_V3_BACKBONE_NAMES = ("convnext_pico", "edgenext_small")
+FUSION_MOBILEVIT_BACKBONE_NAMES = ("convnext_pico", "mobilevitv2_100")
 
 
 def _create_backbone(name: str) -> nn.Module:
@@ -69,7 +70,10 @@ class CropFusionClassifier(nn.Module):
         return self.head(torch.cat(features, dim=1))
 
 
-def build_crop_fusion_classifier(state_dict: dict[str, torch.Tensor]) -> CropFusionClassifier:
-    model = CropFusionClassifier()
+def build_crop_fusion_classifier(
+    state_dict: dict[str, torch.Tensor],
+    backbone_names: tuple[str, ...] = FUSION_V3_BACKBONE_NAMES,
+) -> CropFusionClassifier:
+    model = CropFusionClassifier(backbone_names)
     model.load_state_dict({key: value.float() for key, value in state_dict.items()})
     return model.eval()

@@ -14,6 +14,10 @@ def seed_v3_fusion_model_artifacts(store: S3ObjectStore | None = None) -> None:
             settings.yolo_fusion_v3_classifier_local_path,
             settings.yolo_fusion_v3_classifier_s3_uri,
         ),
+        (
+            settings.yolo_fusion_mobilevit_classifier_local_path,
+            settings.yolo_fusion_mobilevit_classifier_s3_uri,
+        ),
     ]
     for local_path, s3_uri in pairs:
         if local_path:

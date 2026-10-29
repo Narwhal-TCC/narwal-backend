@@ -103,6 +103,16 @@ class Settings(BaseSettings):
         alias="YOLO_FUSION_V3_CLASSIFIER_LOCAL_PATH",
     )
 
+    # YOLO Model A + ConvNeXt/MobileViTv2 fusion on crops (TESTE_CONNEXT_FUSAO, seed 42)
+    yolo_fusion_mobilevit_classifier_s3_uri: str = Field(
+        default="s3://narwal/models/v3/clf_fusao_mobilevitv2_100_s42.pt",
+        alias="YOLO_FUSION_MOBILEVIT_CLASSIFIER_S3_URI",
+    )
+    yolo_fusion_mobilevit_classifier_local_path: str | None = Field(
+        default="data/models/v3/clf_fusao_mobilevitv2_100_s42.pt",
+        alias="YOLO_FUSION_MOBILEVIT_CLASSIFIER_LOCAL_PATH",
+    )
+
     # Analysis list / metadata bounds
     list_scan_cap: int = Field(default=500, alias="LIST_SCAN_CAP")
     max_metadata_length: int = Field(default=256, alias="MAX_METADATA_LENGTH")

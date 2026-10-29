@@ -108,3 +108,18 @@ def test_pool_builds_fusion_v3_gateway():
     pool = GatewayPool(fusion_v3_weights=NoLoadWeights())  # type: ignore[arg-type]
     gateway = pool.get("yolo-fusion-v3")
     assert isinstance(gateway, YoloFusionV3Gateway)
+
+
+def test_pool_builds_mobilevit_fusion_gateway_with_own_classifier(monkeypatch):
+    monkeypatch.setenv(
+        "YOLO_FUSION_MOBILEVIT_CLASSIFIER_S3_URI", "s3://narwal/models/v3/mvit.pt"
+    )
+    get_settings.cache_clear()
+    pool = GatewayPool(fusion_v3_weights=NoLoadWeights())  # type: ignore[arg-type]
+    gateway = pool.get("yolo-fusion-mobilevit")
+    try:
+        assert isinstance(gateway, YoloFusionV3Gateway)
+        assert gateway.weights is not pool.get("yolo-fusion-v3").weights
+        assert gateway.weights._classifier_s3_uri() == "s3://narwal/models/v3/mvit.pt"
+    finally:
+        get_settings.cache_clear()
