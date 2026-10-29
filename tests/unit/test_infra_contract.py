@@ -54,12 +54,15 @@ def test_ec2_uses_lab_instance_profile_variable():
 
 
 def test_nginx_proxies_api_and_serves_spa():
+    nginx_conf = (REPO_ROOT / "scripts/aws/narwal-nginx.conf").read_text(encoding="utf-8")
     ec2_tf = (INFRA_DIR / "ec2.tf").read_text(encoding="utf-8")
-    assert 'location /api/' in ec2_tf
-    assert "proxy_pass http://127.0.0.1:8080" in ec2_tf
-    assert "try_files" in ec2_tf
-    assert "/index.html" in ec2_tf
-    assert "127.0.0.1:8080:8080" in ec2_tf
+    assert 'location /api/' in nginx_conf
+    assert "proxy_pass http://127.0.0.1:8080" in nginx_conf
+    assert "try_files" in nginx_conf
+    assert "/index.html" in nginx_conf
+    user_data_tpl = (INFRA_DIR / "templates/api-user-data.sh.tpl").read_text(encoding="utf-8")
+    assert "127.0.0.1:8080:8080" in user_data_tpl
+    assert "narwal-nginx.conf" in ec2_tf
 
 
 def test_security_group_exposes_http_not_public_api_port():
@@ -88,6 +91,20 @@ def test_terraform_outputs_export_deploy_values():
 def test_api_instance_type_defaults_to_t3_medium():
     variables_tf = (INFRA_DIR / "variables.tf").read_text(encoding="utf-8")
     assert 'default     = "t3.medium"' in variables_tf
+
+
+def test_ec2_uses_ubuntu_jammy_ami_data_source():
+    ec2_tf = (INFRA_DIR / "ec2.tf").read_text(encoding="utf-8")
+    assert 'data "aws_ami" "ubuntu_jammy"' in ec2_tf
+    assert "ubuntu-jammy-22.04-amd64" in ec2_tf
+
+
+def test_data_ebs_pinned_to_availability_zone():
+    ec2_tf = (INFRA_DIR / "ec2.tf").read_text(encoding="utf-8")
+    variables_tf = (INFRA_DIR / "variables.tf").read_text(encoding="utf-8")
+    assert "availability_zone      = var.availability_zone" in ec2_tf
+    assert "availability_zone = var.availability_zone" in ec2_tf
+    assert "variable \"availability_zone\"" in variables_tf
 
 
 def test_aws_env_example_sqlite_on_data_volume():

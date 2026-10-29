@@ -39,6 +39,6 @@ output "api_ssh_key_name" {
 }
 
 output "api_ssh_command" {
-  description = "Example SSH command for Amazon Linux (ec2-user). Use your local private PEM matching ssh_public_key_path."
-  value       = "ssh -i \"<path-to-${var.ssh_key_name}.pem>\" ec2-user@${aws_eip.api.public_ip}"
+  description = "Example SSH command for Ubuntu (ubuntu). Use your local private PEM matching ssh_public_key_path."
+  value       = "ssh -i \"<path-to-${var.ssh_key_name}.pem>\" ubuntu@${aws_eip.api.public_ip}"
 }

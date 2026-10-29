@@ -16,6 +16,12 @@ variable "instance_type" {
   default     = "t3.medium"
 }
 
+variable "availability_zone" {
+  description = "Pin EC2 and data EBS to one AZ so instance replacement does not destroy/recreate the SQLite volume."
+  type        = string
+  default     = "us-east-1a"
+}
+
 variable "iam_instance_profile" {
   description = "Existing Learner Lab instance profile name (do not create IAM roles in TF)."
   type        = string

@@ -41,7 +41,7 @@ flowchart LR
 | S3 app bucket (CLI / `create-app-bucket.sh`, not TF) | Model weights, uploads, UI prefix `ui/` (`S3_BUCKET`) |
 | `aws_ecr_repository.api` | Backend container images |
 | `aws_security_group.api` | TCP **80** public (Nginx); API not exposed on 8080 |
-| `aws_instance.api` | Amazon Linux 2023, Nginx + Docker, **LabInstanceProfile**, **t3.medium** default |
+| `aws_instance.api` | Ubuntu 22.04 (Jammy), Nginx + Docker, **LabInstanceProfile**, **t3.medium** default |
 | `aws_ebs_volume.data` + attachment | Persistent `/data` for SQLite |
 | `aws_eip.api` + association | Stable public demo URL |
 

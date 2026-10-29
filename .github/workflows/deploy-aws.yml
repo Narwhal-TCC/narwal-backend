@@ -14,6 +14,10 @@ on:
       - "scripts/aws/create-app-bucket.sh"
       - "scripts/aws/deploy-api-via-ssh.sh"
       - "scripts/aws/ec2-api-bootstrap.sh"
+      - "scripts/aws/ensure-nginx-edge.sh"
+      - "scripts/aws/mount-data-volume.sh"
+      - "scripts/aws/narwal-nginx.conf"
+      - "infra/templates/**"
       - ".github/workflows/deploy-aws.yml"
   workflow_dispatch:
     inputs:

@@ -6,12 +6,12 @@
 #   EC2_SSH_PRIVATE_KEY   — PEM private key (GitHub secret or path in EC2_SSH_KEY_FILE)
 #
 # Optional:
-#   EC2_SSH_USER          — default ec2-user
+#   EC2_SSH_USER          — default ubuntu (Ubuntu AMI)
 #   EC2_SSH_KEY_FILE      — if set, read key from this path instead of EC2_SSH_PRIVATE_KEY
 
 set -euo pipefail
 
-EC2_SSH_USER="${EC2_SSH_USER:-ec2-user}"
+EC2_SSH_USER="${EC2_SSH_USER:-ubuntu}"
 
 if [[ -z "${EC2_HOST:-}" ]]; then
   echo "EC2_HOST is required" >&2

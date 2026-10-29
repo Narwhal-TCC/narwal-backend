@@ -1,21 +1,27 @@
-data "aws_ami" "amazon_linux_2023" {
+data "aws_ami" "ubuntu_jammy" {
   most_recent = true
-  owners      = ["amazon"]
+  owners      = ["099720109477"] # Canonical
 
   filter {
     name   = "name"
-    values = ["al2023-ami-*-x86_64"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
   }
 
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
   }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
 }
 
 resource "aws_instance" "api" {
-  ami                    = data.aws_ami.amazon_linux_2023.id
+  ami                    = data.aws_ami.ubuntu_jammy.id
   instance_type          = var.instance_type
+  availability_zone      = var.availability_zone
   iam_instance_profile   = var.iam_instance_profile
   key_name               = aws_key_pair.api.key_name
   vpc_security_group_ids = [aws_security_group.api.id]
@@ -36,84 +42,16 @@ resource "aws_instance" "api" {
 }
 
 locals {
-  api_user_data = <<-EOF
-    #!/bin/bash
-    set -euo pipefail
-    exec > /var/log/narwal-user-data.log 2>&1
-
-    dnf install -y docker nginx aws-cli
-    systemctl enable --now docker
-    usermod -aG docker ec2-user
-
-    mkdir -p /var/www/narwal
-    chown -R nginx:nginx /var/www/narwal
-
-    cat > /etc/nginx/conf.d/narwal.conf <<'NGINX'
-    server {
-        listen 80 default_server;
-        listen [::]:80 default_server;
-        server_name _;
-        root /var/www/narwal;
-        index index.html;
-
-        location /api/ {
-            proxy_pass http://127.0.0.1:8080;
-            proxy_http_version 1.1;
-            proxy_set_header Host $$host;
-            proxy_set_header X-Real-IP $$remote_addr;
-            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $$scheme;
-        }
-
-        location / {
-            try_files $$uri $$uri/ /index.html;
-        }
-    }
-    NGINX
-
-    systemctl enable --now nginx
-
-    if ! mountpoint -q /data; then
-      if ! blkid /dev/xvdf; then
-        mkfs -t xfs /dev/xvdf
-      fi
-      mkdir -p /data
-      echo '/dev/xvdf /data xfs defaults,nofail 0 2' >> /etc/fstab
-      mount -a
-      chown 1001:1001 /data
-    fi
-
-    export AWS_REGION="${var.aws_region}"
-    export ECR_REPOSITORY_URL="${aws_ecr_repository.api.repository_url}"
-    export IMAGE_TAG="latest"
-    export NARWAL_ENV_FILE="/etc/narwal/env"
-
-    ECR_REGISTRY="$${ECR_REPOSITORY_URL%%/*}"
-    aws ecr get-login-password --region "$${AWS_REGION}" | docker login --username AWS --password-stdin "$${ECR_REGISTRY}"
-
-    IMAGE="$${ECR_REPOSITORY_URL}:$${IMAGE_TAG}"
-    docker pull "$${IMAGE}" || true
-
-    if docker ps -a --format '{{.Names}}' | grep -qx narwal-api; then
-      docker stop narwal-api || true
-      docker rm narwal-api || true
-    fi
-
-    ENV_ARGS=()
-    if [[ -f "$${NARWAL_ENV_FILE}" ]]; then
-      ENV_ARGS=(--env-file "$${NARWAL_ENV_FILE}")
-    fi
-
-    docker run -d --name narwal-api --restart unless-stopped \
-      -p 127.0.0.1:8080:8080 \
-      -v /data:/data \
-      "$${ENV_ARGS[@]}" \
-      "$${IMAGE}" || echo "Container start deferred until $${NARWAL_ENV_FILE} exists"
-  EOF
+  api_user_data = templatefile("${path.module}/templates/api-user-data.sh.tpl", {
+    aws_region         = var.aws_region
+    ecr_repository_url = aws_ecr_repository.api.repository_url
+    nginx_conf         = file("${path.module}/../scripts/aws/narwal-nginx.conf")
+    mount_data_script  = file("${path.module}/../scripts/aws/mount-data-volume.sh")
+  })
 }
 
 resource "aws_ebs_volume" "data" {
-  availability_zone = aws_instance.api.availability_zone
+  availability_zone = var.availability_zone
   size              = 20
   type              = "gp3"
 
@@ -123,7 +61,7 @@ resource "aws_ebs_volume" "data" {
 }
 
 resource "aws_volume_attachment" "data" {
-  device_name = "/dev/xvdf"
+  device_name = "/dev/sdf"
   volume_id   = aws_ebs_volume.data.id
   instance_id = aws_instance.api.id
 }
