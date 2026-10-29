@@ -57,7 +57,7 @@ def test_nginx_proxies_api_and_serves_spa():
     nginx_conf = (REPO_ROOT / "scripts/aws/narwal-nginx.conf").read_text(encoding="utf-8")
     ec2_tf = (INFRA_DIR / "ec2.tf").read_text(encoding="utf-8")
     assert 'location /api/' in nginx_conf
-    assert "proxy_pass http://127.0.0.1:8080" in nginx_conf
+    assert "proxy_pass http://127.0.0.1:8080/;" in nginx_conf
     assert "try_files" in nginx_conf
     assert "/index.html" in nginx_conf
     user_data_tpl = (INFRA_DIR / "templates/api-user-data.sh.tpl").read_text(encoding="utf-8")
