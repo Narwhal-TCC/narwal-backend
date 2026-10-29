@@ -69,7 +69,7 @@ jobs:
 
       - name: Configure Terraform backend
         env:
-          STATE_BUCKET: ${{ secrets.STATE_BUCKET_NAME != '' && secrets.STATE_BUCKET_NAME || secrets.APP_BUCKET_NAME }}
+          STATE_BUCKET: ${{ secrets.STATE_BUCKET_NAME || secrets.APP_BUCKET_NAME }}
         run: |
           set -euo pipefail
           if [ -z "${STATE_BUCKET}" ]; then
@@ -137,7 +137,7 @@ jobs:
             echo "app_bucket_name=${{ needs.provisioning.outputs.app_bucket_name }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          STATE_BUCKET="${{ secrets.STATE_BUCKET_NAME != '' && secrets.STATE_BUCKET_NAME || secrets.APP_BUCKET_NAME }}"
+          STATE_BUCKET="${{ secrets.STATE_BUCKET_NAME || secrets.APP_BUCKET_NAME }}"
           cat > infra/backend.hcl <<EOF
           bucket = "${STATE_BUCKET}"
           key    = "terraform/narwal-app/state.tfstate"
@@ -185,34 +185,31 @@ jobs:
           ecr_url = os.environ['ECR_REPOSITORY_URL']
           bucket = os.environ['APP_BUCKET_NAME']
           tag = os.environ['IMAGE_TAG']
+          ecr_registry = ecr_url.split('/', 1)[0]
           script = textwrap.dedent(
-              '''
+              f'''
               set -euo pipefail
               AWS_REGION={region}
-              ECR_REPOSITORY_URL={ecr}
-              APP_BUCKET={bucket}
-              IMAGE_TAG={tag}
               CONTAINER_NAME=narwal-api
               NARWAL_ENV_FILE=/etc/narwal/env
               mkdir -p /etc/narwal
-              if aws s3 cp \"s3://${{APP_BUCKET}}/config/narwal.env\" \"$NARWAL_ENV_FILE\" 2>/dev/null; then
-                chmod 600 \"$NARWAL_ENV_FILE\"
+              if aws s3 cp "s3://{bucket}/config/narwal.env" "$NARWAL_ENV_FILE" 2>/dev/null; then
+                chmod 600 "$NARWAL_ENV_FILE"
               fi
-              ECR_REGISTRY=\"${{ECR_REPOSITORY_URL%%/*}}\"
-              aws ecr get-login-password --region \"$AWS_REGION\" | docker login --username AWS --password-stdin \"$ECR_REGISTRY\"
-              IMAGE=\"${{ECR_REPOSITORY_URL}}:${{IMAGE_TAG}}\"
-              docker pull \"$IMAGE\"
-              if docker ps -a --format '{{{{.Names}}}}' | grep -qx \"$CONTAINER_NAME\"; then
-                docker stop \"$CONTAINER_NAME\" || true
-                docker rm \"$CONTAINER_NAME\" || true
+              aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "{ecr_registry}"
+              IMAGE="{ecr_url}:{tag}"
+              docker pull "$IMAGE"
+              if docker ps -a --format '{{{{.Names}}}}' | grep -qx "$CONTAINER_NAME"; then
+                docker stop "$CONTAINER_NAME" || true
+                docker rm "$CONTAINER_NAME" || true
               fi
-              ENV_ARGS=()
-              if [ -f \"$NARWAL_ENV_FILE\" ]; then
-                ENV_ARGS=(--env-file \"$NARWAL_ENV_FILE\")
+              if [ -f "$NARWAL_ENV_FILE" ]; then
+                docker run -d --name "$CONTAINER_NAME" --restart unless-stopped -p 127.0.0.1:8080:8080 -v /data:/data --env-file "$NARWAL_ENV_FILE" "$IMAGE"
+              else
+                docker run -d --name "$CONTAINER_NAME" --restart unless-stopped -p 127.0.0.1:8080:8080 -v /data:/data "$IMAGE"
               fi
-              docker run -d --name \"$CONTAINER_NAME\" --restart unless-stopped -p 127.0.0.1:8080:8080 -v /data:/data \"${{ENV_ARGS[@]}}\" \"$IMAGE\"
               '''
-          ).format(region=region, ecr=ecr_url, bucket=bucket, tag=tag)
+          )
           print(json.dumps({'commands': [script]}))
           ")
           COMMAND_ID=$(aws ssm send-command \
