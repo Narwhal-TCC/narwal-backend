@@ -112,6 +112,8 @@ run_docker run -d \
   "${ENV_FILE_ARGS[@]}" \
   "${IMAGE}"
 
+run_docker image prune -af >/dev/null || true
+
 if ! curl -sf --max-time 5 http://127.0.0.1/ >/dev/null; then
   echo "Nginx is not responding on http://127.0.0.1/" >&2
   sudo systemctl status nginx --no-pager || true

@@ -14,6 +14,8 @@ fi
 
 sudo mkdir -p "${DOCROOT}"
 sudo aws s3 sync "s3://${APP_BUCKET_NAME}/${UI_S3_PREFIX}/" "${DOCROOT}/" --delete
+# sync skips same-size files; index.html keeps its size when only asset hashes change.
+sudo aws s3 cp "s3://${APP_BUCKET_NAME}/${UI_S3_PREFIX}/index.html" "${DOCROOT}/index.html"
 sudo chown -R "${WEB_USER}:${WEB_USER}" "${DOCROOT}"
 sudo systemctl reload nginx
 
