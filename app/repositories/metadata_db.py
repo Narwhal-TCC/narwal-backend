@@ -22,6 +22,22 @@ CREATE TABLE IF NOT EXISTS users (
 );
 """
 
+_CAMPAIGNS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS campaigns (
+  campaign_id TEXT NOT NULL,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  min_lat REAL NOT NULL,
+  max_lat REAL NOT NULL,
+  min_lon REAL NOT NULL,
+  max_lon REAL NOT NULL,
+  simulated INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, campaign_id),
+  UNIQUE (org_id, name)
+);
+"""
+
 _ANALYSES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS analyses (
   analysis_id TEXT NOT NULL,
@@ -40,6 +56,10 @@ CREATE TABLE IF NOT EXISTS analyses (
   created_at TEXT NOT NULL,
   inference_ms INTEGER,
   model_id TEXT NOT NULL DEFAULT 'two-stage-pt',
+  campaign_id TEXT,
+  latitude REAL,
+  longitude REAL,
+  location_source TEXT,
   PRIMARY KEY (org_id, analysis_id)
 );
 
@@ -54,7 +74,7 @@ def _analyses_column_names(conn: sqlite3.Connection) -> set[str]:
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(_ORGS_SCHEMA + _USERS_SCHEMA + _ANALYSES_SCHEMA)
+    conn.executescript(_ORGS_SCHEMA + _USERS_SCHEMA + _CAMPAIGNS_SCHEMA + _ANALYSES_SCHEMA)
     if "model_id" not in _analyses_column_names(conn):
         conn.execute(
             """
@@ -69,6 +89,21 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE analyses ADD COLUMN ai_status TEXT")
     if "ai_reason" not in columns:
         conn.execute("ALTER TABLE analyses ADD COLUMN ai_reason TEXT")
+    columns = _analyses_column_names(conn)
+    if "campaign_id" not in columns:
+        conn.execute("ALTER TABLE analyses ADD COLUMN campaign_id TEXT")
+    if "latitude" not in columns:
+        conn.execute("ALTER TABLE analyses ADD COLUMN latitude REAL")
+    if "longitude" not in columns:
+        conn.execute("ALTER TABLE analyses ADD COLUMN longitude REAL")
+    if "location_source" not in columns:
+        conn.execute("ALTER TABLE analyses ADD COLUMN location_source TEXT")
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS analyses_org_campaign
+          ON analyses (org_id, campaign_id)
+        """
+    )
 
 
 def _probe_existing_file(db_path: Path) -> None:
