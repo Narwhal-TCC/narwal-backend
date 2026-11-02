@@ -1,3 +1,4 @@
+import random
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -9,6 +10,7 @@ from PIL import Image
 
 from app.core.config import Settings
 from app.core.errors import (
+    CampaignNotFoundError,
     InferenceTimeoutError,
     InvalidImageError,
     ModelUnavailableError,
@@ -20,6 +22,31 @@ from app.services.ai_analyst import AiAnalyst
 from app.services.analyze import MAX_IMAGE_BYTES, AnalyzeService
 from app.services.gateway_pool import GatewayPool
 from app.services.model_gateway import FakeModelGateway
+
+
+DEFAULT_CAMPAIGN_ID = "camp-1"
+DEFAULT_CAMPAIGN = {
+    "campaign_id": DEFAULT_CAMPAIGN_ID,
+    "name": "Test Campaign",
+    "min_lat": 38.6,
+    "max_lat": 38.7,
+    "min_lon": -9.5,
+    "max_lon": -9.35,
+    "simulated": True,
+    "created_at": "2026-09-01T12:00:00+00:00",
+}
+
+
+class FakeCampaignRepository:
+    def __init__(self, campaigns: dict[tuple[str, str], dict] | None = None) -> None:
+        self._campaigns = campaigns
+
+    def get_campaign(self, org_id: str, campaign_id: str) -> dict | None:
+        if self._campaigns is not None:
+            return self._campaigns.get((org_id, campaign_id))
+        if campaign_id == DEFAULT_CAMPAIGN_ID:
+            return {**DEFAULT_CAMPAIGN, "org_id": org_id}
+        return None
 
 
 def png_bytes(width: int = 640, height: int = 480) -> bytes:
@@ -122,17 +149,41 @@ def build_service(
     gateway=None,
     store=None,
     repository=None,
+    campaign_repository=None,
     timeout_seconds=60,
     gateway_pool=None,
     ai_analyst=None,
+    rng=None,
 ):
     pool = gateway_pool or _pool_for(gateway or FakeModelGateway())
     return AnalyzeService(
         gateway_pool=pool,
         object_store=store or FakeObjectStore(),
         repository=repository or FakeAnalysisRepository(),
+        campaign_repository=campaign_repository or FakeCampaignRepository(),
         timeout_seconds=timeout_seconds,
         ai_analyst=ai_analyst or _disabled_ai_analyst(),
+        rng=rng,
+    )
+
+
+def analyze(
+    service: AnalyzeService,
+    *,
+    org_id: str = "org-1",
+    user_id: str = "user-1",
+    content_type: str = "image/png",
+    data: bytes | None = None,
+    campaign_id: str = DEFAULT_CAMPAIGN_ID,
+    **kwargs,
+):
+    return service.analyze_image(
+        org_id=org_id,
+        user_id=user_id,
+        content_type=content_type,
+        data=data if data is not None else png_bytes(),
+        campaign_id=campaign_id,
+        **kwargs,
     )
 
 
@@ -142,14 +193,13 @@ def test_valid_png_returns_detections_and_persists_analysis():
     gateway = FakeModelGateway()
     service = build_service(gateway=gateway, store=store, repository=repository)
 
-    result = service.analyze_image(
-        org_id="org-1",
-        user_id="user-1",
-        content_type="image/png",
-        data=png_bytes(),
-    )
+    result = analyze(service)
 
     assert result.status == "succeeded"
+    assert result.campaign is not None
+    assert result.campaign.id == DEFAULT_CAMPAIGN_ID
+    assert result.location is not None
+    assert result.location.source == "simulated"
     assert result.org_id == "org-1"
     assert result.user_id == "user-1"
     assert len(result.detections) == 1
@@ -187,7 +237,7 @@ def test_valid_jpeg_returns_detections_and_persists_analysis():
     gateway = FakeModelGateway()
     service = build_service(gateway=gateway, store=store, repository=repository)
 
-    result = service.analyze_image("org-1", "user-1", "image/jpeg", jpeg_bytes())
+    result = analyze(service, content_type="image/jpeg", data=jpeg_bytes())
 
     assert result.status == "succeeded"
     assert result.image_content_type == "image/jpeg"
@@ -202,7 +252,7 @@ def test_no_detections_returns_empty_list_and_still_persists():
     repository = FakeAnalysisRepository()
     service = build_service(gateway=FakeModelGateway(raw_output=[]), repository=repository)
 
-    result = service.analyze_image("org-1", "user-1", "image/png", png_bytes())
+    result = analyze(service)
 
     assert result.detections == []
     assert repository.puts[0]["detections"] == []
@@ -214,12 +264,7 @@ def test_oversize_image_is_rejected_without_any_write():
     service = build_service(store=store, repository=repository)
 
     with pytest.raises(InvalidImageError) as excinfo:
-        service.analyze_image(
-            "org-1",
-            "user-1",
-            "image/png",
-            b"x" * (MAX_IMAGE_BYTES + 1),
-        )
+        analyze(service, data=b"x" * (MAX_IMAGE_BYTES + 1))
 
     assert excinfo.value.code == "INVALID_IMAGE"
     assert excinfo.value.status_code == 400
@@ -233,7 +278,7 @@ def test_corrupt_bytes_with_valid_content_type_are_rejected_without_any_write():
     service = build_service(store=store, repository=repository)
 
     with pytest.raises(InvalidImageError) as excinfo:
-        service.analyze_image("org-1", "user-1", "image/png", b"not-an-image")
+        analyze(service, data=b"not-an-image")
 
     assert excinfo.value.code == "INVALID_IMAGE"
     assert store.puts == []
@@ -246,7 +291,7 @@ def test_unsupported_content_type_is_rejected_without_any_write():
     service = build_service(store=store, repository=repository)
 
     with pytest.raises(InvalidImageError):
-        service.analyze_image("org-1", "user-1", "image/tiff", png_bytes())
+        analyze(service, content_type="image/tiff")
 
     assert store.puts == []
     assert repository.puts == []
@@ -258,7 +303,7 @@ def test_model_unavailable_leaves_no_image_or_analysis():
     service = build_service(gateway=UnavailableModelGateway(), store=store, repository=repository)
 
     with pytest.raises(ModelUnavailableError) as excinfo:
-        service.analyze_image("org-1", "user-1", "image/png", png_bytes())
+        analyze(service)
 
     assert excinfo.value.code == "MODEL_UNAVAILABLE"
     assert excinfo.value.status_code == 503
@@ -271,7 +316,7 @@ def test_storage_error_after_inference_leaves_no_analysis_row():
     service = build_service(store=FailingObjectStore(), repository=repository)
 
     with pytest.raises(StorageError) as excinfo:
-        service.analyze_image("org-1", "user-1", "image/png", png_bytes())
+        analyze(service)
 
     assert excinfo.value.code == "STORAGE_ERROR"
     assert excinfo.value.status_code == 503
@@ -283,7 +328,7 @@ def test_same_org_concurrent_analyses_keep_payloads_isolated():
     store = FakeObjectStore()
 
     def run(user_id: str, confidence: float):
-        return build_service(
+        service = build_service(
             gateway=FakeModelGateway(
                 raw_output=[
                     {
@@ -299,7 +344,8 @@ def test_same_org_concurrent_analyses_keep_payloads_isolated():
             ),
             store=store,
             repository=repository,
-        ).analyze_image("org-1", user_id, "image/png", png_bytes())
+        )
+        return analyze(service, user_id=user_id)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         first = pool.submit(run, "user-a", 0.91)
@@ -316,87 +362,59 @@ def test_same_org_concurrent_analyses_keep_payloads_isolated():
     assert {row["user_id"] for row in repository.puts} == {"user-a", "user-b"}
 
 
-def test_analyze_with_metadata_persists_parity_fields():
+def test_analyze_with_entered_coordinates_persists_location():
     repository = FakeAnalysisRepository()
     service = build_service(repository=repository)
 
-    result = service.analyze_image(
-        org_id="org-1",
-        user_id="user-1",
-        content_type="image/png",
-        data=png_bytes(),
-        campaign_name="Alpha Campaign",
-        coordinates="-23.5,-46.6",
+    result = analyze(
+        service,
+        latitude=38.65,
+        longitude=-9.42,
         collected_at="2026-09-12T08:30:00+00:00",
     )
 
     assert result.review_status == "pending"
-    assert result.campaign_name == "Alpha Campaign"
-    assert result.campaign is None
-    assert result.location is None
+    assert result.campaign is not None
+    assert result.campaign.name == "Test Campaign"
+    assert result.location is not None
+    assert result.location.lat == 38.65
+    assert result.location.lon == -9.42
+    assert result.location.source == "entered"
     assert result.collected_at == datetime(2026, 9, 12, 8, 30, tzinfo=UTC)
-    assert result.primary_class == "NOMBO"
-    assert result.milco_detection_count == 0
 
     persisted = repository.puts[0]
-    assert persisted["review_status"] == "pending"
-    assert persisted["campaign_name"] == "Alpha Campaign"
-    assert "coordinates" not in persisted
-    assert persisted["collected_at"] == "2026-09-12T08:30:00+00:00"
-    assert persisted["primary_class"] == "NOMBO"
-    assert persisted["milco_detection_count"] == 0
+    assert persisted["campaign_id"] == DEFAULT_CAMPAIGN_ID
+    assert persisted["latitude"] == 38.65
+    assert persisted["longitude"] == -9.42
+    assert persisted["location_source"] == "entered"
 
 
-def test_analyze_without_metadata_uses_defaults():
+def test_analyze_without_coordinates_draws_simulated_point_in_area():
     repository = FakeAnalysisRepository()
-    service = build_service(repository=repository)
+    rng = random.Random(7)
+    service = build_service(repository=repository, rng=rng)
 
-    result = service.analyze_image("org-1", "user-1", "image/png", png_bytes())
+    result = analyze(service)
 
-    assert result.review_status == "pending"
-    assert result.campaign_name is None
-    assert result.campaign is None
-    assert result.location is None
-    assert result.collected_at is None
-    assert result.primary_class == "NOMBO"
-    assert result.milco_detection_count == 0
-    assert repository.puts[0]["campaign_name"] is None
-
-
-def test_oversized_campaign_name_is_rejected_without_any_write():
-    store = FakeObjectStore()
-    repository = FakeAnalysisRepository()
-    service = build_service(store=store, repository=repository)
-
-    with pytest.raises(ValidationError) as excinfo:
-        service.analyze_image(
-            "org-1",
-            "user-1",
-            "image/png",
-            png_bytes(),
-            campaign_name="x" * 257,
-        )
-
-    assert excinfo.value.status_code == 400
-    assert store.puts == []
-    assert repository.puts == []
+    assert result.location is not None
+    assert result.location.source == "simulated"
+    assert DEFAULT_CAMPAIGN["min_lat"] <= result.location.lat <= DEFAULT_CAMPAIGN["max_lat"]
+    assert DEFAULT_CAMPAIGN["min_lon"] <= result.location.lon <= DEFAULT_CAMPAIGN["max_lon"]
+    assert repository.puts[0]["location_source"] == "simulated"
 
 
 def test_invalid_collected_at_is_rejected_without_any_write():
     store = FakeObjectStore()
     repository = FakeAnalysisRepository()
-    service = build_service(store=store, repository=repository)
+    gateway = SpyModelGateway()
+    service = build_service(store=store, repository=repository, gateway=gateway)
 
     with pytest.raises(ValidationError) as excinfo:
-        service.analyze_image(
-            "org-1",
-            "user-1",
-            "image/png",
-            png_bytes(),
-            collected_at="not-a-datetime",
-        )
+        analyze(service, collected_at="not-a-datetime")
 
     assert excinfo.value.status_code == 400
+    assert gateway.ensure_calls == 0
+    assert gateway.predict_calls == 0
     assert store.puts == []
     assert repository.puts == []
 
@@ -418,7 +436,7 @@ def test_milco_detection_sets_primary_class_and_count():
     )
     service = build_service(gateway=gateway, repository=repository)
 
-    result = service.analyze_image("org-1", "user-1", "image/png", png_bytes())
+    result = analyze(service)
 
     assert result.primary_class == "MILCO"
     assert result.milco_detection_count == 1
@@ -438,7 +456,7 @@ def test_inference_timeout_returns_timeout_error_without_success_row():
 
     started = time.perf_counter()
     with pytest.raises(InferenceTimeoutError) as excinfo:
-        service.analyze_image("org-1", "user-1", "image/png", png_bytes())
+        analyze(service)
     elapsed = time.perf_counter() - started
 
     assert excinfo.value.code == "INFERENCE_TIMEOUT"
@@ -453,13 +471,7 @@ def test_analyze_omitted_or_empty_model_id_stores_balanced_pipeline(model_id):
     repository = FakeAnalysisRepository()
     service = build_service(repository=repository)
 
-    result = service.analyze_image(
-        "org-1",
-        "user-1",
-        "image/png",
-        png_bytes(),
-        model_id=model_id,
-    )
+    result = analyze(service, model_id=model_id)
 
     assert result.model_id == "yolo-convnext-balanced"
     assert repository.puts[0]["model_id"] == "yolo-convnext-balanced"
@@ -469,13 +481,7 @@ def test_analyze_explicit_two_stage_pt_stores_two_stage_pt():
     repository = FakeAnalysisRepository()
     service = build_service(repository=repository)
 
-    result = service.analyze_image(
-        "org-1",
-        "user-1",
-        "image/png",
-        png_bytes(),
-        model_id="two-stage-pt",
-    )
+    result = analyze(service, model_id="two-stage-pt")
 
     assert result.model_id == "two-stage-pt"
     assert repository.puts[0]["model_id"] == "two-stage-pt"
@@ -488,13 +494,7 @@ def test_analyze_unknown_model_id_raises_without_gateway_or_repository_write():
     service = build_service(gateway=gateway, store=store, repository=repository)
 
     with pytest.raises(UnknownModelError) as excinfo:
-        service.analyze_image(
-            "org-1",
-            "user-1",
-            "image/png",
-            png_bytes(),
-            model_id="not-a-model",
-        )
+        analyze(service, model_id="not-a-model")
 
     assert excinfo.value.code == "UNKNOWN_MODEL"
     assert excinfo.value.status_code == 400
@@ -512,13 +512,7 @@ def test_analyze_bad_image_with_unknown_model_id_raises_invalid_image_first():
     service = build_service(gateway=gateway, store=store, repository=repository)
 
     with pytest.raises(InvalidImageError) as excinfo:
-        service.analyze_image(
-            "org-1",
-            "user-1",
-            "image/png",
-            b"not-an-image",
-            model_id="not-a-model",
-        )
+        analyze(service, data=b"not-an-image", model_id="not-a-model")
 
     assert excinfo.value.code == "INVALID_IMAGE"
     assert gateway.ensure_calls == 0
@@ -537,13 +531,7 @@ def test_analyze_model_unavailable_with_model_id_leaves_no_insert():
     )
 
     with pytest.raises(ModelUnavailableError):
-        service.analyze_image(
-            "org-1",
-            "user-1",
-            "image/png",
-            png_bytes(),
-            model_id="two-stage-pt",
-        )
+        analyze(service, model_id="two-stage-pt")
 
     assert store.puts == []
     assert repository.puts == []
@@ -566,7 +554,7 @@ def test_analyze_canonical_row_is_stored_with_exact_field_values():
     )
     service = build_service(gateway=gateway, repository=repository)
 
-    result = service.analyze_image("org-1", "user-1", "image/png", png_bytes())
+    result = analyze(service)
 
     assert len(result.detections) == 1
     detection = result.detections[0]
@@ -582,3 +570,115 @@ def test_analyze_canonical_row_is_stored_with_exact_field_values():
     persisted = repository.puts[0]["detections"][0]
     assert persisted["confidence"] == 0.88
     assert persisted["label"] == "MILCO"
+
+
+def _refusal_setup():
+    store = FakeObjectStore()
+    repository = FakeAnalysisRepository()
+    gateway = SpyModelGateway()
+    service = build_service(gateway=gateway, store=store, repository=repository)
+    return service, gateway, store, repository
+
+
+def test_missing_campaign_id_raises_before_gateway():
+    service, gateway, store, repository = _refusal_setup()
+
+    with pytest.raises(ValidationError, match="campaign_id is required"):
+        analyze(service, campaign_id="")
+
+    assert gateway.ensure_calls == 0
+    assert gateway.predict_calls == 0
+    assert store.puts == []
+    assert repository.puts == []
+
+
+def test_unknown_campaign_raises_not_found_before_gateway():
+    service, gateway, store, repository = _refusal_setup()
+
+    with pytest.raises(CampaignNotFoundError):
+        analyze(service, campaign_id="missing-campaign")
+
+
+def test_other_org_campaign_raises_not_found_before_gateway():
+    campaigns = {("org-1", "camp-1"): {**DEFAULT_CAMPAIGN, "org_id": "org-1"}}
+    service, gateway, store, repository = _refusal_setup()
+    service.campaign_repository = FakeCampaignRepository(campaigns)
+
+    with pytest.raises(CampaignNotFoundError):
+        analyze(service, org_id="org-2", campaign_id="camp-1")
+
+    assert gateway.ensure_calls == 0
+    assert gateway.predict_calls == 0
+    assert store.puts == []
+    assert repository.puts == []
+
+
+def test_half_coordinate_pair_raises_before_gateway():
+    service, gateway, store, repository = _refusal_setup()
+
+    with pytest.raises(ValidationError, match="latitude and longitude must be sent together"):
+        analyze(service, latitude=38.65)
+
+    assert gateway.ensure_calls == 0
+    assert gateway.predict_calls == 0
+    assert store.puts == []
+    assert repository.puts == []
+
+
+def test_position_outside_campaign_area_raises_before_gateway():
+    service, gateway, store, repository = _refusal_setup()
+
+    with pytest.raises(ValidationError, match="position is outside the campaign area"):
+        analyze(service, latitude=40.0, longitude=-9.42)
+
+    assert gateway.ensure_calls == 0
+    assert gateway.predict_calls == 0
+    assert store.puts == []
+    assert repository.puts == []
+
+
+def test_non_finite_coordinates_raise_before_gateway():
+    service, gateway, store, repository = _refusal_setup()
+
+    with pytest.raises(ValidationError, match="finite"):
+        analyze(service, latitude=float("nan"), longitude=-9.42)
+
+    assert gateway.ensure_calls == 0
+    assert gateway.predict_calls == 0
+    assert store.puts == []
+    assert repository.puts == []
+
+
+@pytest.mark.parametrize(
+    ("latitude", "longitude"),
+    [
+        (38.6, -9.5),
+        (38.7, -9.35),
+        (38.65, -9.42),
+    ],
+)
+def test_boundary_coordinates_are_accepted(latitude, longitude):
+    repository = FakeAnalysisRepository()
+    service = build_service(repository=repository)
+
+    result = analyze(service, latitude=latitude, longitude=longitude)
+
+    assert result.location is not None
+    assert result.location.lat == latitude
+    assert result.location.lon == longitude
+    assert result.location.source == "entered"
+
+
+def test_simulated_point_is_deterministic_with_injected_random():
+    repository = FakeAnalysisRepository()
+    first = build_service(repository=repository, rng=random.Random(99))
+    second = build_service(repository=repository, rng=random.Random(99))
+
+    first_result = analyze(first)
+    second_result = analyze(second)
+
+    assert first_result.location is not None
+    assert second_result.location is not None
+    assert first_result.location.lat == second_result.location.lat
+    assert first_result.location.lon == second_result.location.lon
+    assert first_result.location.source == "simulated"

@@ -227,9 +227,9 @@ T9 → T10 → T11
 
 **Done when**:
 
-- [ ] One test per spec AC 1-7 of "Analysis location", each asserting the gateway was never called on refusal
-- [ ] Boundary values accepted; injected `random.Random` makes simulated point deterministic
-- [ ] Gate check passes: `python -m pytest tests/unit -q`
+- [x] One test per spec AC 1-7 of "Analysis location", each asserting the gateway was never called on refusal
+- [x] Boundary values accepted; injected `random.Random` makes simulated point deterministic
+- [x] Gate check passes: `python -m pytest tests/unit -q`
 
 **Tests**: unit
 **Gate**: quick

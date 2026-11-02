@@ -18,8 +18,9 @@ router = APIRouter(prefix="/analyses", tags=["analyses"])
 @router.post("", response_model=AnalysisResult)
 async def create_analysis(
     file: UploadFile = File(...),
-    campaign_name: str | None = Form(None),
-    coordinates: str | None = Form(None),
+    campaign_id: str | None = Form(None),
+    latitude: float | None = Form(None),
+    longitude: float | None = Form(None),
     collected_at: str | None = Form(None),
     model_id: str | None = Form(default=None),
     current_user: dict[str, str] = Depends(get_current_user),
@@ -33,8 +34,9 @@ async def create_analysis(
         user_id=current_user["user_id"],
         content_type=file.content_type,
         data=data,
-        campaign_name=campaign_name,
-        coordinates=coordinates,
+        campaign_id=campaign_id,
+        latitude=latitude,
+        longitude=longitude,
         collected_at=collected_at,
         model_id=model_id,
     )
