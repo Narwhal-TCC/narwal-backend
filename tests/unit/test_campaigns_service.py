@@ -122,6 +122,7 @@ def test_get_points_maps_positioned_analyses():
     assert point.primary_class == "MILCO"
     assert point.milco_detection_count == 1
     assert point.detection_count == 1
+    assert point.created_at == datetime(2026, 9, 13, 12, 0, tzinfo=UTC)
 
 
 def test_get_points_uses_list_scan_cap():

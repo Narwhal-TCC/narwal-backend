@@ -171,6 +171,9 @@ def test_get_campaign_points_returns_positioned_analyses(campaigns_client):
     assert point["lon"] == -9.42
     assert point["location_source"] == "entered"
     assert point["primary_class"] == "MILCO"
+    assert point["milco_detection_count"] == 1
+    assert point["detection_count"] == 1
+    assert point["created_at"] == "2026-09-15T00:00:00Z"
 
 
 def test_get_campaign_points_empty_campaign_returns_empty_points(campaigns_client):

@@ -597,6 +597,11 @@ def test_unknown_campaign_raises_not_found_before_gateway():
     with pytest.raises(CampaignNotFoundError):
         analyze(service, campaign_id="missing-campaign")
 
+    assert gateway.ensure_calls == 0
+    assert gateway.predict_calls == 0
+    assert store.puts == []
+    assert repository.puts == []
+
 
 def test_other_org_campaign_raises_not_found_before_gateway():
     campaigns = {("org-1", "camp-1"): {**DEFAULT_CAMPAIGN, "org_id": "org-1"}}
