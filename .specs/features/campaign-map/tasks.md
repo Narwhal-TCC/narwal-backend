@@ -153,8 +153,8 @@ T9 → T10 → T11
 
 **Done when**:
 
-- [ ] Error maps to 404 through the existing handler
-- [ ] Gate check passes: `python -m pytest tests/unit -q`
+- [x] Error maps to 404 through the existing handler
+- [x] Gate check passes: `python -m pytest tests/unit -q`
 
 **Tests**: unit
 **Gate**: quick

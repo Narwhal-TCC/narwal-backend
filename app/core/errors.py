@@ -72,6 +72,12 @@ class AnalysisNotFoundError(AppError):
     default_message = "Analysis not found"
 
 
+class CampaignNotFoundError(AppError):
+    code = "CAMPAIGN_NOT_FOUND"
+    status_code = 404
+    default_message = "Campaign not found"
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def handle_app_error(_request: Request, exc: AppError) -> JSONResponse:
