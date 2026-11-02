@@ -194,3 +194,133 @@ def test_get_campaign_points_cross_org_returns_404(campaigns_client):
 
     assert response.status_code == 404
     assert response.json()["code"] == "CAMPAIGN_NOT_FOUND"
+
+
+def test_create_campaign_returns_201_with_defaults(campaigns_client):
+    headers = _auth_headers(campaigns_client, "operator")
+
+    response = campaigns_client.post(
+        "/campaigns",
+        headers=headers,
+        json={"name": "Created Campaign", "area": CAMPAIGN_AREA},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["name"] == "Created Campaign"
+    assert body["area"] == CAMPAIGN_AREA
+    assert body["simulated"] is False
+    assert body["analyses_count"] == 0
+    assert body["id"]
+
+
+def test_create_campaign_duplicate_name_returns_409(campaigns_client):
+    headers = _auth_headers(campaigns_client, "operator")
+
+    response = campaigns_client.post(
+        "/campaigns",
+        headers=headers,
+        json={"name": "Newer Campaign", "area": CAMPAIGN_AREA},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "campaign name already exists"
+
+
+def test_create_campaign_invalid_name_returns_400(campaigns_client):
+    headers = _auth_headers(campaigns_client, "operator")
+
+    response = campaigns_client.post(
+        "/campaigns",
+        headers=headers,
+        json={"name": "   ", "area": CAMPAIGN_AREA},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "VALIDATION_ERROR"
+
+
+def test_create_campaign_without_token_returns_401(campaigns_client):
+    response = campaigns_client.post(
+        "/campaigns",
+        json={"name": "No Auth", "area": CAMPAIGN_AREA},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "UNAUTHORIZED"
+
+
+def test_get_campaign_returns_org_campaign(campaigns_client):
+    headers = _auth_headers(campaigns_client, "operator")
+
+    response = campaigns_client.get("/campaigns/camp-newer", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == "camp-newer"
+    assert body["name"] == "Newer Campaign"
+    assert body["analyses_count"] == 1
+
+
+def test_get_campaign_cross_org_returns_404(campaigns_client):
+    headers = _auth_headers(campaigns_client, "operator")
+
+    response = campaigns_client.get("/campaigns/camp-rival", headers=headers)
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "CAMPAIGN_NOT_FOUND"
+
+
+def test_get_campaign_without_token_returns_401(campaigns_client):
+    response = campaigns_client.get("/campaigns/camp-newer")
+
+    assert response.status_code == 401
+
+
+def test_patch_campaign_rename_succeeds_with_analyses(campaigns_client):
+    headers = _auth_headers(campaigns_client, "operator")
+
+    response = campaigns_client.patch(
+        "/campaigns/camp-newer",
+        headers=headers,
+        json={"name": "Renamed Campaign"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Renamed Campaign"
+    assert response.json()["analyses_count"] == 1
+
+
+def test_patch_campaign_area_blocked_when_analyses_exist(campaigns_client):
+    headers = _auth_headers(campaigns_client, "operator")
+
+    response = campaigns_client.patch(
+        "/campaigns/camp-newer",
+        headers=headers,
+        json={
+            "area": {
+                "min_lat": 38.61,
+                "min_lon": -9.51,
+                "max_lat": 38.71,
+                "max_lon": -9.36,
+            }
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "campaign area cannot be changed while analyses exist"
+
+
+def test_patch_campaign_empty_body_returns_400(campaigns_client):
+    headers = _auth_headers(campaigns_client, "operator")
+
+    response = campaigns_client.patch("/campaigns/camp-older", headers=headers, json={})
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "VALIDATION_ERROR"
+
+
+def test_patch_campaign_without_token_returns_401(campaigns_client):
+    response = campaigns_client.patch("/campaigns/camp-older", json={"name": "X"})
+
+    assert response.status_code == 401
