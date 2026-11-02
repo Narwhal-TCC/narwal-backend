@@ -278,7 +278,9 @@ def test_analyze_with_metadata_round_trips_in_response_and_get(analyses_client):
     assert response.status_code == 200
     body = response.json()
     assert body["campaign_name"] == "North Survey"
-    assert body["coordinates"] == "12.34, -56.78"
+    assert "coordinates" not in body
+    assert body["campaign"] is None
+    assert body["location"] is None
     expected_collected_at = datetime(2026, 9, 12, 8, 30, tzinfo=UTC)
     assert datetime.fromisoformat(body["collected_at"]) == expected_collected_at
     assert body["review_status"] == "pending"
@@ -286,7 +288,7 @@ def test_analyze_with_metadata_round_trips_in_response_and_get(analyses_client):
 
     detail = client.get(f"/analyses/{body['id']}", headers=headers).json()
     assert detail["campaign_name"] == "North Survey"
-    assert detail["coordinates"] == "12.34, -56.78"
+    assert "coordinates" not in detail
     assert datetime.fromisoformat(detail["collected_at"]) == expected_collected_at
 
 
@@ -299,7 +301,9 @@ def test_analyze_without_metadata_omits_optional_fields(analyses_client):
     assert response.status_code == 200
     body = response.json()
     assert body["campaign_name"] is None
-    assert body["coordinates"] is None
+    assert "coordinates" not in body
+    assert body["campaign"] is None
+    assert body["location"] is None
     assert body["collected_at"] is None
 
 
@@ -529,7 +533,7 @@ def test_stats_populated_org_aggregates_counts_and_campaign(analyses_client):
     body = response.json()
     assert body["analyses_count"] == 2
     assert body["milco_detections_count"] == 1
-    assert body["active_campaign"] == "Alpha"
+    assert body["active_campaign"] == {"id": None, "name": "Alpha"}
     assert body["last_analysis"]["id"] == latest["id"]
     assert body["last_analysis"]["primary_class"] == "NOMBO"
 

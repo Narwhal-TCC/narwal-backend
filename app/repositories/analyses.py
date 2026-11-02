@@ -18,7 +18,8 @@ _ANALYSIS_COLUMNS = """
     primary_class, campaign_name, coordinates, collected_at,
     milco_detection_count, detections, image_s3_key,
     image_content_type, created_at, inference_ms, model_id,
-    ai_analysis_json, ai_status, ai_reason
+    ai_analysis_json, ai_status, ai_reason,
+    campaign_id, latitude, longitude, location_source
 """
 
 
@@ -105,6 +106,10 @@ def _to_record(row: sqlite3.Row) -> dict:
         "primary_class": row["primary_class"],
         "campaign_name": row["campaign_name"],
         "coordinates": row["coordinates"],
+        "campaign_id": row["campaign_id"] if "campaign_id" in row.keys() else None,
+        "latitude": row["latitude"] if "latitude" in row.keys() else None,
+        "longitude": row["longitude"] if "longitude" in row.keys() else None,
+        "location_source": row["location_source"] if "location_source" in row.keys() else None,
         "collected_at": row["collected_at"],
         "milco_detection_count": int(row["milco_detection_count"]),
         "detections": detections,
@@ -143,7 +148,10 @@ class AnalysisRepository:
         review_status: str = "pending",
         primary_class: str | None = None,
         campaign_name: str | None = None,
-        coordinates: str | None = None,
+        campaign_id: str | None = None,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        location_source: str | None = None,
         collected_at: str | None = None,
         milco_detection_count: int = 0,
         model_id: str = DEFAULT_MODEL_ID,
@@ -159,8 +167,9 @@ class AnalysisRepository:
                   primary_class, campaign_name, coordinates, collected_at,
                   milco_detection_count, detections, image_s3_key,
                   image_content_type, created_at, inference_ms, model_id,
-                  ai_analysis_json, ai_status, ai_reason
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ai_analysis_json, ai_status, ai_reason,
+                  campaign_id, latitude, longitude, location_source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     analysis_id,
@@ -170,7 +179,7 @@ class AnalysisRepository:
                     review_status,
                     primary_class,
                     campaign_name,
-                    coordinates,
+                    None,
                     collected_at,
                     milco_detection_count,
                     json.dumps(detections),
@@ -182,6 +191,10 @@ class AnalysisRepository:
                     ai_json,
                     ai_status,
                     ai_reason,
+                    campaign_id,
+                    latitude,
+                    longitude,
+                    location_source,
                 ),
             )
             conn.commit()
@@ -258,6 +271,34 @@ class AnalysisRepository:
                 LIMIT ? OFFSET ?
                 """,
                 (org_id, limit, offset),
+            ).fetchall()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
+        return [_to_record(row) for row in rows]
+
+    def list_by_campaign(
+        self,
+        org_id: str,
+        campaign_id: str,
+        limit: int = DEFAULT_LIST_LIMIT,
+    ) -> list[dict]:
+        conn = self._with_connection()
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT {_ANALYSIS_COLUMNS}
+                FROM analyses
+                WHERE org_id = ?
+                  AND campaign_id = ?
+                  AND latitude IS NOT NULL
+                  AND longitude IS NOT NULL
+                  AND location_source IS NOT NULL
+                ORDER BY created_at DESC, analysis_id DESC
+                LIMIT ?
+                """,
+                (org_id, campaign_id, limit),
             ).fetchall()
         except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
             raise StoreUnavailableError() from exc

@@ -202,9 +202,9 @@ T9 → T10 → T11
 
 **Done when**:
 
-- [ ] Round-trip returns identical lat/lon
-- [ ] `list_by_campaign` excludes other campaigns, other orgs, and rows without a position
-- [ ] Gate check passes: `python -m pytest tests/unit tests/integration -q`
+- [x] Round-trip returns identical lat/lon
+- [x] `list_by_campaign` excludes other campaigns, other orgs, and rows without a position
+- [x] Gate check passes: `python -m pytest tests/unit tests/integration -q`
 
 **Tests**: integration
 **Gate**: full

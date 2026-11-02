@@ -341,7 +341,7 @@ def test_analyze_with_metadata_persists_parity_fields():
     persisted = repository.puts[0]
     assert persisted["review_status"] == "pending"
     assert persisted["campaign_name"] == "Alpha Campaign"
-    assert persisted["coordinates"] == "-23.5,-46.6"
+    assert "coordinates" not in persisted
     assert persisted["collected_at"] == "2026-09-12T08:30:00+00:00"
     assert persisted["primary_class"] == "NOMBO"
     assert persisted["milco_detection_count"] == 0

@@ -104,7 +104,6 @@ class AnalyzeService:
             review_status="pending",
             primary_class=primary_class,
             campaign_name=validated_metadata["campaign_name"],
-            coordinates=validated_metadata["coordinates"],
             collected_at=collected_at_value,
             milco_detection_count=milco_detection_count,
             detections=[detection.model_dump() for detection in detections],

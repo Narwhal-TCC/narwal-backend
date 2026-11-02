@@ -5,6 +5,7 @@ import pytest
 
 from app.core.errors import StoreUnavailableError
 from app.repositories.analyses import AnalysisRepository, _to_record, new_analysis_id
+from app.repositories.campaigns import CampaignRepository, new_campaign_id
 
 DETECTIONS = [
     {
@@ -154,7 +155,6 @@ def test_put_parity_fields_round_trip(repository):
         review_status="pending",
         primary_class="MILCO",
         campaign_name="Alpha",
-        coordinates="-23.5,-46.6",
         collected_at="2026-09-12T08:30:00+00:00",
         milco_detection_count=1,
     )
@@ -164,7 +164,7 @@ def test_put_parity_fields_round_trip(repository):
     assert record["review_status"] == "pending"
     assert record["primary_class"] == "MILCO"
     assert record["campaign_name"] == "Alpha"
-    assert record["coordinates"] == "-23.5,-46.6"
+    assert record["coordinates"] is None
     assert record["collected_at"] == "2026-09-12T08:30:00+00:00"
     assert record["milco_detection_count"] == 1
 
@@ -290,6 +290,107 @@ class _ConnectionProxy:
 
     def __getattr__(self, name):
         return getattr(self._inner, name)
+
+
+def test_location_fields_round_trip(repository):
+    repo, _ = repository
+    repo.put_analysis(
+        analysis_id="an-loc",
+        org_id="org-1",
+        user_id="user-1",
+        detections=DETECTIONS,
+        image_s3_key="analyses/org-1/an-loc/original.png",
+        image_content_type="image/png",
+        created_at="2026-09-13T12:00:00+00:00",
+        campaign_id="camp-1",
+        latitude=38.6500001,
+        longitude=-9.4200001,
+        location_source="entered",
+    )
+
+    record = repo.get_analysis("org-1", "an-loc")
+
+    assert record["latitude"] == 38.6500001
+    assert record["longitude"] == -9.4200001
+    assert record["location_source"] == "entered"
+    assert record["coordinates"] is None
+
+
+def test_list_by_campaign_returns_only_positioned_rows_for_campaign_and_org(repository):
+    repo, db_path = repository
+    campaigns = CampaignRepository(str(db_path))
+    campaign_a = new_campaign_id()
+    campaign_b = new_campaign_id()
+    for campaign_id, org_id in (
+        (campaign_a, "org-1"),
+        (campaign_b, "org-1"),
+        (campaign_a, "org-2"),
+    ):
+        campaigns.put_campaign(
+            campaign_id=campaign_id,
+            org_id=org_id,
+            name=f"Campaign {campaign_id}",
+            min_lat=38.6,
+            max_lat=38.7,
+            min_lon=-9.5,
+            max_lon=-9.35,
+            simulated=True,
+            created_at="2026-09-01T12:00:00+00:00",
+        )
+
+    repo.put_analysis(
+        analysis_id="an-in-a",
+        org_id="org-1",
+        user_id="user-1",
+        detections=DETECTIONS,
+        image_s3_key="analyses/org-1/an-in-a/original.png",
+        image_content_type="image/png",
+        created_at="2026-09-13T12:00:00+00:00",
+        campaign_id=campaign_a,
+        latitude=38.65,
+        longitude=-9.42,
+        location_source="simulated",
+    )
+    repo.put_analysis(
+        analysis_id="an-other-campaign",
+        org_id="org-1",
+        user_id="user-1",
+        detections=DETECTIONS,
+        image_s3_key="analyses/org-1/an-other-campaign/original.png",
+        image_content_type="image/png",
+        created_at="2026-09-12T12:00:00+00:00",
+        campaign_id=campaign_b,
+        latitude=38.61,
+        longitude=-9.41,
+        location_source="simulated",
+    )
+    repo.put_analysis(
+        analysis_id="an-no-position",
+        org_id="org-1",
+        user_id="user-1",
+        detections=DETECTIONS,
+        image_s3_key="analyses/org-1/an-no-position/original.png",
+        image_content_type="image/png",
+        created_at="2026-09-11T12:00:00+00:00",
+        campaign_id=campaign_a,
+    )
+    repo.put_analysis(
+        analysis_id="an-other-org",
+        org_id="org-2",
+        user_id="user-1",
+        detections=DETECTIONS,
+        image_s3_key="analyses/org-2/an-other-org/original.png",
+        image_content_type="image/png",
+        created_at="2026-09-10T12:00:00+00:00",
+        campaign_id=campaign_a,
+        latitude=38.62,
+        longitude=-9.43,
+        location_source="simulated",
+    )
+
+    points = repo.list_by_campaign("org-1", campaign_a)
+
+    assert [row["id"] for row in points] == ["an-in-a"]
 
 
 def test_failed_insert_raises_store_unavailable_and_leaves_list_unchanged(repository):
