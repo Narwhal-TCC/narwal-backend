@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.bootstrap.seed import MOCK_CAMPAIGN_NAME, run_seed
+from app.bootstrap.seed import MOCK_CAMPAIGN_AREA, MOCK_CAMPAIGN_NAME, run_seed
 from app.core.config import get_settings
 from app.core.security import hash_password, verify_password
 from app.repositories.campaigns import CampaignRepository
@@ -99,10 +99,10 @@ def test_run_seed_creates_mock_campaign_idempotently(monkeypatch, tmp_path):
     assert len(second) == 1
     assert first[0]["campaign_id"] == second[0]["campaign_id"]
     assert first[0]["name"] == MOCK_CAMPAIGN_NAME
-    assert first[0]["min_lat"] == 38.60
-    assert first[0]["max_lat"] == 38.70
-    assert first[0]["min_lon"] == -9.50
-    assert first[0]["max_lon"] == -9.35
+    assert first[0]["min_lat"] == MOCK_CAMPAIGN_AREA["min_lat"]
+    assert first[0]["max_lat"] == MOCK_CAMPAIGN_AREA["max_lat"]
+    assert first[0]["min_lon"] == MOCK_CAMPAIGN_AREA["min_lon"]
+    assert first[0]["max_lon"] == MOCK_CAMPAIGN_AREA["max_lon"]
     assert first[0]["simulated"] is True
 
 

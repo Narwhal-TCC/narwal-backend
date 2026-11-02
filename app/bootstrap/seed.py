@@ -7,6 +7,13 @@ from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
 
 MOCK_CAMPAIGN_NAME = "Campanha Simulada - Costa de Cascais"
+# Offshore box west of Cascais (keeps survey area in open water, not over the city).
+MOCK_CAMPAIGN_AREA = {
+    "min_lat": 38.635,
+    "max_lat": 38.685,
+    "min_lon": -9.58,
+    "max_lon": -9.46,
+}
 
 
 def seed_v3_fusion_model_artifacts(store: S3ObjectStore | None = None) -> None:
@@ -45,19 +52,32 @@ def seed_v2_model_artifacts(store: S3ObjectStore | None = None) -> None:
             continue
 
 
+def _campaign_area_matches(row: dict) -> bool:
+    return (
+        float(row["min_lat"]) == MOCK_CAMPAIGN_AREA["min_lat"]
+        and float(row["max_lat"]) == MOCK_CAMPAIGN_AREA["max_lat"]
+        and float(row["min_lon"]) == MOCK_CAMPAIGN_AREA["min_lon"]
+        and float(row["max_lon"]) == MOCK_CAMPAIGN_AREA["max_lon"]
+    )
+
+
 def _seed_demo_campaign(campaign_repo: CampaignRepository, demo_org_id: str) -> None:
-    if campaign_repo.get_by_name(demo_org_id, MOCK_CAMPAIGN_NAME) is not None:
+    existing = campaign_repo.get_by_name(demo_org_id, MOCK_CAMPAIGN_NAME)
+    created_at = (
+        existing["created_at"]
+        if existing is not None
+        else datetime.now(UTC).replace(microsecond=0).isoformat()
+    )
+    campaign_id = existing["campaign_id"] if existing is not None else new_campaign_id()
+    if existing is not None and _campaign_area_matches(existing):
         return
     campaign_repo.put_campaign(
-        campaign_id=new_campaign_id(),
+        campaign_id=campaign_id,
         org_id=demo_org_id,
         name=MOCK_CAMPAIGN_NAME,
-        min_lat=38.60,
-        max_lat=38.70,
-        min_lon=-9.50,
-        max_lon=-9.35,
         simulated=True,
-        created_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
+        created_at=created_at,
+        **MOCK_CAMPAIGN_AREA,
     )
 
 

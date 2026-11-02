@@ -11,6 +11,7 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.campaigns import router as campaigns_router
 from app.api.routes.models import router as models_router
 from app.bootstrap.seed import run_seed, seed_v2_model_artifacts, seed_v3_fusion_model_artifacts
+from app.bootstrap.seed_demo_analyses import seed_demo_campaign_analyses
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError, register_error_handlers
 from app.repositories.s3_store import S3ObjectStore
@@ -46,6 +47,10 @@ def bootstrap() -> None:
         logger.warning("metadata store unavailable", exc_info=True)
     except Exception:
         logger.warning("Could not seed organizations and users", exc_info=True)
+    try:
+        seed_demo_campaign_analyses(store=store)
+    except Exception:
+        logger.warning("Could not seed demo campaign analyses", exc_info=True)
     try:
         get_gateway_pool().get(DEFAULT_MODEL_ID).ensure_model_loaded()
     except Exception:

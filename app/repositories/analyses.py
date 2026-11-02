@@ -278,6 +278,34 @@ class AnalysisRepository:
             conn.close()
         return [_to_record(row) for row in rows]
 
+    def update_location(
+        self,
+        org_id: str,
+        analysis_id: str,
+        *,
+        latitude: float,
+        longitude: float,
+    ) -> bool:
+        conn = self._with_connection()
+        rowcount = 0
+        try:
+            cursor = conn.execute(
+                """
+                UPDATE analyses
+                SET latitude = ?, longitude = ?
+                WHERE org_id = ? AND analysis_id = ?
+                """,
+                (latitude, longitude, org_id, analysis_id),
+            )
+            rowcount = cursor.rowcount
+            conn.commit()
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            conn.rollback()
+            raise StoreUnavailableError() from exc
+        finally:
+            conn.close()
+        return rowcount > 0
+
     def list_by_campaign(
         self,
         org_id: str,
