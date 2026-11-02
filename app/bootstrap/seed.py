@@ -1,7 +1,12 @@
+from datetime import UTC, datetime
+
 from app.core.config import convnext_local_path_list, convnext_s3_uri_list, get_settings
 from app.core.security import hash_password
+from app.repositories.campaigns import CampaignRepository, new_campaign_id
 from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
+
+MOCK_CAMPAIGN_NAME = "Campanha Simulada - Costa de Cascais"
 
 
 def seed_v3_fusion_model_artifacts(store: S3ObjectStore | None = None) -> None:
@@ -40,8 +45,25 @@ def seed_v2_model_artifacts(store: S3ObjectStore | None = None) -> None:
             continue
 
 
+def _seed_demo_campaign(campaign_repo: CampaignRepository, demo_org_id: str) -> None:
+    if campaign_repo.get_by_name(demo_org_id, MOCK_CAMPAIGN_NAME) is not None:
+        return
+    campaign_repo.put_campaign(
+        campaign_id=new_campaign_id(),
+        org_id=demo_org_id,
+        name=MOCK_CAMPAIGN_NAME,
+        min_lat=38.60,
+        max_lat=38.70,
+        min_lon=-9.50,
+        max_lon=-9.35,
+        simulated=True,
+        created_at=datetime.now(UTC).replace(microsecond=0).isoformat(),
+    )
+
+
 def run_seed(repository: UserRepository | None = None) -> None:
     repo = repository or UserRepository()
+    campaign_repo = CampaignRepository(repo._path)
     settings = get_settings()
     org_id = settings.platform_admin_org_id
 
@@ -69,6 +91,8 @@ def run_seed(repository: UserRepository | None = None) -> None:
             password_hash=hash_password(settings.seed_demo_password),
             role="member",
         )
+
+    _seed_demo_campaign(campaign_repo, demo_org_id)
 
 
 if __name__ == "__main__":

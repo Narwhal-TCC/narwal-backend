@@ -128,9 +128,9 @@ T9 → T10 → T11
 
 **Done when**:
 
-- [ ] Running seed twice yields exactly one campaign
-- [ ] Platform org gets no campaign
-- [ ] Gate check passes: `python -m pytest tests/unit tests/integration -q`
+- [x] Running seed twice yields exactly one campaign
+- [x] Platform org gets no campaign
+- [x] Gate check passes: `python -m pytest tests/unit tests/integration -q`
 
 **Tests**: integration
 **Gate**: full

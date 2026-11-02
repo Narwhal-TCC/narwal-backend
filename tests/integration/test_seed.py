@@ -1,8 +1,9 @@
 from pathlib import Path
 
-from app.bootstrap.seed import run_seed
+from app.bootstrap.seed import MOCK_CAMPAIGN_NAME, run_seed
 from app.core.config import get_settings
 from app.core.security import hash_password, verify_password
+from app.repositories.campaigns import CampaignRepository
 from app.repositories.users import UserRepository
 
 
@@ -79,3 +80,41 @@ def test_run_seed_leaves_existing_password_hash_unchanged(monkeypatch, tmp_path:
     assert user is not None
     assert user["password_hash"] == custom_hash
     assert verify_password("env-password", user["password_hash"]) is False
+
+
+def test_run_seed_creates_mock_campaign_idempotently(monkeypatch, tmp_path):
+    db_path = tmp_path / "seed-campaign.db"
+    monkeypatch.setenv("SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("SEED_DEMO_ORG_ID", "frontend-org")
+    get_settings.cache_clear()
+    repository = UserRepository(str(db_path))
+    campaign_repo = CampaignRepository(str(db_path))
+
+    run_seed(repository)
+    first = campaign_repo.list_by_org("frontend-org")
+    run_seed(repository)
+    second = campaign_repo.list_by_org("frontend-org")
+
+    assert len(first) == 1
+    assert len(second) == 1
+    assert first[0]["campaign_id"] == second[0]["campaign_id"]
+    assert first[0]["name"] == MOCK_CAMPAIGN_NAME
+    assert first[0]["min_lat"] == 38.60
+    assert first[0]["max_lat"] == 38.70
+    assert first[0]["min_lon"] == -9.50
+    assert first[0]["max_lon"] == -9.35
+    assert first[0]["simulated"] is True
+
+
+def test_run_seed_does_not_seed_campaign_for_platform_org(monkeypatch, tmp_path):
+    db_path = tmp_path / "seed-platform-campaign.db"
+    monkeypatch.setenv("SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("PLATFORM_ADMIN_ORG_ID", "platform-org")
+    monkeypatch.setenv("SEED_DEMO_ORG_ID", "frontend-org")
+    get_settings.cache_clear()
+    repository = UserRepository(str(db_path))
+    campaign_repo = CampaignRepository(str(db_path))
+
+    run_seed(repository)
+
+    assert campaign_repo.list_by_org("platform-org") == []
