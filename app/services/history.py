@@ -5,6 +5,7 @@ from app.core.errors import AnalysisNotFoundError, ValidationError
 from app.repositories.analyses import DEFAULT_LIST_LIMIT, AnalysisRepository
 from app.repositories.s3_store import DEFAULT_PRESIGN_EXPIRES_SECONDS, S3ObjectStore
 from app.schemas.analysis import (
+    ActiveCampaign,
     AiAnalysis,
     AnalysisListResponse,
     AnalysisResult,
@@ -104,7 +105,7 @@ class HistoryService:
         for item in records:
             campaign_name = item.get("campaign_name")
             if campaign_name:
-                active_campaign = campaign_name
+                active_campaign = ActiveCampaign(id=None, name=campaign_name)
                 break
 
         return OrgStatsResponse(
@@ -155,6 +156,27 @@ class HistoryService:
         return suppress_overlapping(parsed)
 
     @staticmethod
+    def _record_campaign_ref(record: dict):
+        from app.schemas.analysis import CampaignRef
+
+        campaign_id = record.get("campaign_id")
+        campaign_name = record.get("campaign_name_linked") or record.get("campaign_name")
+        if campaign_id and campaign_name:
+            return CampaignRef(id=campaign_id, name=campaign_name)
+        return None
+
+    @staticmethod
+    def _record_location(record: dict):
+        from app.schemas.analysis import AnalysisLocation
+
+        lat = record.get("latitude")
+        lon = record.get("longitude")
+        source = record.get("location_source")
+        if lat is None or lon is None or source is None:
+            return None
+        return AnalysisLocation(lat=float(lat), lon=float(lon), source=source)
+
+    @staticmethod
     def _record_model_id(record: dict) -> str:
         value = record.get("model_id")
         if value is None:
@@ -179,7 +201,8 @@ class HistoryService:
             review_status=record.get("review_status", "pending"),
             primary_class=record.get("primary_class"),
             campaign_name=record.get("campaign_name"),
-            coordinates=record.get("coordinates"),
+            campaign=self._record_campaign_ref(record),
+            location=self._record_location(record),
             collected_at=self._parse_collected_at(record.get("collected_at")),
             milco_detection_count=record.get("milco_detection_count", 0),
             created_at=record["created_at"],
@@ -197,7 +220,8 @@ class HistoryService:
             review_status=record.get("review_status", "pending"),
             primary_class=record.get("primary_class"),
             campaign_name=record.get("campaign_name"),
-            coordinates=record.get("coordinates"),
+            campaign=self._record_campaign_ref(record),
+            location=self._record_location(record),
             collected_at=self._parse_collected_at(record.get("collected_at")),
             milco_detection_count=record.get("milco_detection_count", 0),
             detections=self._visible_detections(record),

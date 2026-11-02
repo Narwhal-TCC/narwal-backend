@@ -177,9 +177,9 @@ T9 → T10 → T11
 
 **Done when**:
 
-- [ ] `location.source` accepts only `entered` | `simulated`
-- [ ] Serialized `AnalysisResult` has no `coordinates` key
-- [ ] Gate check passes: `python -m pytest tests/unit -q`
+- [x] `location.source` accepts only `entered` | `simulated`
+- [x] Serialized `AnalysisResult` has no `coordinates` key
+- [x] Gate check passes: `python -m pytest tests/unit -q`
 
 **Tests**: unit
 **Gate**: quick

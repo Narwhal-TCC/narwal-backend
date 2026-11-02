@@ -332,7 +332,8 @@ def test_analyze_with_metadata_persists_parity_fields():
 
     assert result.review_status == "pending"
     assert result.campaign_name == "Alpha Campaign"
-    assert result.coordinates == "-23.5,-46.6"
+    assert result.campaign is None
+    assert result.location is None
     assert result.collected_at == datetime(2026, 9, 12, 8, 30, tzinfo=UTC)
     assert result.primary_class == "NOMBO"
     assert result.milco_detection_count == 0
@@ -354,7 +355,8 @@ def test_analyze_without_metadata_uses_defaults():
 
     assert result.review_status == "pending"
     assert result.campaign_name is None
-    assert result.coordinates is None
+    assert result.campaign is None
+    assert result.location is None
     assert result.collected_at is None
     assert result.primary_class == "NOMBO"
     assert result.milco_detection_count == 0

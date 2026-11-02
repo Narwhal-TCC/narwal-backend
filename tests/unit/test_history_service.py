@@ -300,7 +300,8 @@ def test_list_maps_parity_fields_on_summary():
     assert summary.review_status == "confirmed"
     assert summary.primary_class == "MILCO"
     assert summary.campaign_name == "Alpha"
-    assert summary.coordinates == "-23.5,-46.6"
+    assert summary.campaign is None
+    assert summary.location is None
     assert summary.collected_at is not None
     assert summary.milco_detection_count == 2
 
@@ -405,7 +406,9 @@ def test_get_org_stats_populated_org():
     assert stats.milco_detections_count == 6
     assert stats.last_analysis is not None
     assert stats.last_analysis.id == "an-3"
-    assert stats.active_campaign == "Beta"
+    assert stats.active_campaign is not None
+    assert stats.active_campaign.id is None
+    assert stats.active_campaign.name == "Beta"
 
 
 def test_get_list_and_stats_last_analysis_return_stored_model_id():

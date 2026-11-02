@@ -14,6 +14,7 @@ AiReason = Literal[
     "rate_limited",
     "invalid_response",
 ]
+LocationSource = Literal["entered", "simulated"]
 
 
 class AiDetectionNote(BaseModel):
@@ -44,6 +45,54 @@ class Detection(BaseModel):
     detector_score: float = Field(ge=0.0, le=1.0)
 
 
+class CampaignArea(BaseModel):
+    min_lat: float
+    min_lon: float
+    max_lat: float
+    max_lon: float
+
+
+class CampaignRef(BaseModel):
+    id: str
+    name: str
+
+
+class AnalysisLocation(BaseModel):
+    lat: float
+    lon: float
+    source: LocationSource
+
+
+class Campaign(BaseModel):
+    id: str
+    name: str
+    area: CampaignArea
+    simulated: bool
+    analyses_count: int
+    created_at: datetime
+
+
+class CampaignPoint(BaseModel):
+    analysis_id: str
+    lat: float
+    lon: float
+    location_source: LocationSource
+    primary_class: PrimaryClass | None = None
+    milco_detection_count: int
+    detection_count: int
+    created_at: datetime
+
+
+class CampaignPointsResponse(BaseModel):
+    campaign: Campaign
+    points: list[CampaignPoint]
+
+
+class ActiveCampaign(BaseModel):
+    id: str | None = None
+    name: str
+
+
 class AnalysisResult(BaseModel):
     id: str
     org_id: str
@@ -52,7 +101,8 @@ class AnalysisResult(BaseModel):
     review_status: ReviewStatus = "pending"
     primary_class: PrimaryClass | None = None
     campaign_name: str | None = Field(default=None, max_length=256)
-    coordinates: str | None = Field(default=None, max_length=256)
+    campaign: CampaignRef | None = None
+    location: AnalysisLocation | None = None
     collected_at: datetime | None = None
     milco_detection_count: int = 0
     detections: list[Detection]
@@ -73,7 +123,8 @@ class AnalysisSummary(BaseModel):
     review_status: ReviewStatus = "pending"
     primary_class: PrimaryClass | None = None
     campaign_name: str | None = Field(default=None, max_length=256)
-    coordinates: str | None = Field(default=None, max_length=256)
+    campaign: CampaignRef | None = None
+    location: AnalysisLocation | None = None
     collected_at: datetime | None = None
     milco_detection_count: int = 0
     created_at: datetime
@@ -96,4 +147,4 @@ class OrgStatsResponse(BaseModel):
     analyses_count: int
     milco_detections_count: int
     last_analysis: AnalysisSummary | None
-    active_campaign: str | None
+    active_campaign: ActiveCampaign | None
