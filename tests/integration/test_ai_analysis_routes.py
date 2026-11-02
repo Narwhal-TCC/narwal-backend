@@ -25,6 +25,7 @@ from app.services.ai_analyst import AnalystContext
 from app.services.analyze import AnalyzeService
 from app.services.gateway_pool import GatewayPool
 from app.services.history import HistoryService
+from tests.conftest import seed_route_test_campaigns
 
 BUCKET = "narwal-ai-routes-test"
 
@@ -116,6 +117,7 @@ def ai_routes_client(monkeypatch, tmp_path: Path):
         users = UserRepository(str(db_path))
         users.put_org("org-1", "Sonar Team")
         users.put_user("user-1", "org-1", "operator", hash_password("pw"), "member")
+        seed_route_test_campaigns(str(db_path))
         s3 = __import__("boto3").client("s3", region_name="us-east-1")
         object_store = S3ObjectStore(client=s3, bucket=BUCKET)
         object_store.ensure_bucket()
@@ -158,6 +160,7 @@ def test_post_and_get_return_same_ready_ai_analysis(ai_routes_client):
         "/analyses",
         headers=headers,
         files={"file": ("sonar.png", png_bytes(), "image/png")},
+        data={"campaign_id": "camp-default"},
     )
 
     assert response.status_code == 200
@@ -179,6 +182,7 @@ def test_post_returns_unavailable_ai_analysis_with_201(ai_routes_client):
         "/analyses",
         headers=headers,
         files={"file": ("sonar.png", png_bytes(), "image/png")},
+        data={"campaign_id": "camp-default"},
     )
 
     assert response.status_code == 200
@@ -196,6 +200,7 @@ def test_zero_detections_still_calls_analyst(ai_routes_client):
         "/analyses",
         headers=headers,
         files={"file": ("sonar.png", png_bytes(), "image/png")},
+        data={"campaign_id": "camp-default"},
     )
 
     assert analyst.calls == 1
@@ -241,6 +246,7 @@ def test_inference_failure_does_not_call_analyst(ai_routes_client):
         "/analyses",
         headers=headers,
         files={"file": ("sonar.png", png_bytes(), "image/png")},
+        data={"campaign_id": "camp-default"},
     )
 
     assert response.status_code == 503

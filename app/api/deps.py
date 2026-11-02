@@ -12,8 +12,8 @@ from app.repositories.users import UserRepository
 from app.services.ai_analyst import AiAnalyst
 from app.services.analyze import AnalyzeService
 from app.services.auth import AuthService
-from app.services.gateway_pool import GatewayPool
 from app.services.campaigns import CampaignService
+from app.services.gateway_pool import GatewayPool
 from app.services.history import HistoryService
 from app.services.model_gateway import ModelGateway
 

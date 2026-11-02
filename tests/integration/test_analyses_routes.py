@@ -28,8 +28,11 @@ from app.services.ai_analyst import AiAnalyst
 from app.services.analyze import AnalyzeService
 from app.services.gateway_pool import GatewayPool
 from app.services.history import HistoryService
+from tests.conftest import seed_route_test_campaigns
 
 BUCKET = "narwal-routes-test"
+
+_OMIT_CAMPAIGN = object()
 
 
 def _disabled_ai_analyst() -> AiAnalyst:
@@ -112,6 +115,7 @@ def analyses_client(monkeypatch, tmp_path: Path):
             hash_password("pw"),
             "platform_admin",
         )
+        seed_route_test_campaigns(str(db_path))
 
         s3 = boto3.client("s3", region_name="us-east-1")
         object_store = S3ObjectStore(client=s3, bucket=BUCKET)
@@ -156,13 +160,18 @@ def post_image(
     content_type: str = "image/png",
     *,
     query_params: dict | None = None,
-    **form_fields: str,
+    campaign_id: str | None | object = "camp-default",
+    **form_fields: str | float,
 ):
+    payload: dict[str, str | float] = dict(form_fields)
+    if campaign_id is not _OMIT_CAMPAIGN:
+        if campaign_id is not None:
+            payload["campaign_id"] = str(campaign_id)
     return client.post(
         "/analyses",
         headers=headers,
         files={"file": ("sonar.png", data, content_type)},
-        data=form_fields,
+        data=payload,
         params=query_params or {},
     )
 
@@ -270,24 +279,26 @@ def test_analyze_with_metadata_round_trips_in_response_and_get(analyses_client):
         client,
         headers,
         png_bytes(),
-        campaign_name="North Survey",
-        coordinates="12.34, -56.78",
+        campaign_id="camp-north",
+        latitude=38.65,
+        longitude=-9.42,
         collected_at="2026-09-12T08:30:00+00:00",
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["campaign_name"] == "North Survey"
+    assert body["campaign_name"] is None
     assert "coordinates" not in body
-    assert body["campaign"] is None
-    assert body["location"] is None
+    assert body["campaign"] == {"id": "camp-north", "name": "North Survey"}
+    assert body["location"] == {"lat": 38.65, "lon": -9.42, "source": "entered"}
     expected_collected_at = datetime(2026, 9, 12, 8, 30, tzinfo=UTC)
     assert datetime.fromisoformat(body["collected_at"]) == expected_collected_at
     assert body["review_status"] == "pending"
     assert body["primary_class"] == "NOMBO"
 
     detail = client.get(f"/analyses/{body['id']}", headers=headers).json()
-    assert detail["campaign_name"] == "North Survey"
+    assert detail["campaign"] == {"id": "camp-north", "name": "North Survey"}
+    assert detail["location"]["lat"] == 38.65
     assert "coordinates" not in detail
     assert datetime.fromisoformat(detail["collected_at"]) == expected_collected_at
 
@@ -302,8 +313,8 @@ def test_analyze_without_metadata_omits_optional_fields(analyses_client):
     body = response.json()
     assert body["campaign_name"] is None
     assert "coordinates" not in body
-    assert body["campaign"] is None
-    assert body["location"] is None
+    assert body["campaign"] == {"id": "camp-default", "name": "Test Campaign"}
+    assert body["location"]["source"] == "simulated"
     assert body["collected_at"] is None
 
 
@@ -335,15 +346,15 @@ def test_analyze_without_token_returns_401(analyses_client):
 def test_list_q_filters_by_campaign_name(analyses_client):
     client, _ = analyses_client
     headers = auth_headers(client, "operator")
-    post_image(client, headers, png_bytes(), campaign_name="North Survey")
-    post_image(client, headers, png_bytes(), campaign_name="South Run")
+    post_image(client, headers, png_bytes(), campaign_id="camp-north")
+    post_image(client, headers, png_bytes(), campaign_id="camp-south")
 
     response = client.get("/analyses", headers=headers, params={"q": "north"})
 
     assert response.status_code == 200
     items = response.json()["items"]
     assert len(items) == 1
-    assert items[0]["campaign_name"] == "North Survey"
+    assert items[0]["campaign"]["name"] == "North Survey"
 
 
 def test_list_class_filter_milco_and_nombo(analyses_client):
@@ -378,7 +389,7 @@ def test_list_filters_respect_org_isolation(analyses_client):
     owner_headers = auth_headers(client, "operator")
     rival_headers = auth_headers(client, "rival")
     gateway.raw_output = [_stage(label="MILCO")]
-    post_image(client, owner_headers, png_bytes(), campaign_name="North Survey")
+    post_image(client, owner_headers, png_bytes(), campaign_id="camp-north")
 
     rival_list = client.get(
         "/analyses",
@@ -523,9 +534,9 @@ def test_stats_populated_org_aggregates_counts_and_campaign(analyses_client):
     client, gateway = analyses_client
     headers = auth_headers(client, "operator")
     gateway.raw_output = [_stage(label="MILCO")]
-    post_image(client, headers, png_bytes(), campaign_name="Beta").json()
+    post_image(client, headers, png_bytes(), campaign_id="camp-beta").json()
     gateway.raw_output = [_stage(label="NOMBO")]
-    latest = post_image(client, headers, png_bytes(), campaign_name="Alpha").json()
+    latest = post_image(client, headers, png_bytes(), campaign_id="camp-alpha").json()
 
     response = client.get("/analyses/stats", headers=headers)
 
@@ -533,7 +544,7 @@ def test_stats_populated_org_aggregates_counts_and_campaign(analyses_client):
     body = response.json()
     assert body["analyses_count"] == 2
     assert body["milco_detections_count"] == 1
-    assert body["active_campaign"] == {"id": None, "name": "Alpha"}
+    assert body["active_campaign"] == {"id": "camp-alpha", "name": "Alpha"}
     assert body["last_analysis"]["id"] == latest["id"]
     assert body["last_analysis"]["primary_class"] == "NOMBO"
 
@@ -571,7 +582,9 @@ def test_platform_admin_cannot_list_or_get_another_org_analyses(analyses_client)
     assert detail.status_code == 404
     assert detail.json()["code"] == "ANALYSIS_NOT_FOUND"
 
-    admin_created = post_image(client, admin_headers, png_bytes()).json()
+    admin_created = post_image(
+        client, admin_headers, png_bytes(), campaign_id="camp-platform"
+    ).json()
     assert admin_created["org_id"] == "platform"
     admin_list = client.get("/analyses", headers=admin_headers).json()
     assert [item["id"] for item in admin_list["items"]] == [admin_created["id"]]
@@ -630,6 +643,7 @@ def test_stored_analysis_readable_via_http_after_new_client_on_same_file(
         seed_users = UserRepository(str(db_path))
         seed_users.put_org("org-1", "Sonar Team")
         seed_users.put_user("user-1", "org-1", "operator", hash_password("pw"), "member")
+        seed_route_test_campaigns(str(db_path))
 
         _wire_analyses_app(db_path, gateway, s3)
         with TestClient(app) as client:
@@ -638,7 +652,7 @@ def test_stored_analysis_readable_via_http_after_new_client_on_same_file(
                 client,
                 headers,
                 png_bytes(),
-                campaign_name="Persist Survey",
+                campaign_id="camp-persist",
             ).json()
             analysis_id = created["id"]
         app.dependency_overrides.clear()
@@ -654,7 +668,7 @@ def test_stored_analysis_readable_via_http_after_new_client_on_same_file(
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == analysis_id
-    assert body["campaign_name"] == "Persist Survey"
+    assert body["campaign"] == {"id": "camp-persist", "name": "Persist Survey"}
 
 
 def test_get_analysis_returns_confidence_088_as_json_number(analyses_client):
@@ -674,8 +688,8 @@ def test_list_analyses_returns_newest_created_first(analyses_client):
     client, _ = analyses_client
     headers = auth_headers(client, "operator")
 
-    older = post_image(client, headers, png_bytes(), campaign_name="Older Run").json()
-    newer = post_image(client, headers, png_bytes(), campaign_name="Newer Run").json()
+    older = post_image(client, headers, png_bytes(), campaign_id="camp-older").json()
+    newer = post_image(client, headers, png_bytes(), campaign_id="camp-newer").json()
 
     response = client.get("/analyses", headers=headers)
 
@@ -797,6 +811,7 @@ def test_failed_insert_returns_503_and_leaves_list_unchanged(
     users = UserRepository(str(db_path))
     users.put_org("org-1", "Sonar Team")
     users.put_user("user-1", "org-1", "operator", hash_password("pw"), "member")
+    seed_route_test_campaigns(str(db_path))
     analyses = AnalysisRepository(str(db_path))
     gateway = ConfigurableModelGateway()
 
@@ -992,6 +1007,7 @@ def test_post_analyses_routes_each_model_id_to_its_gateway(monkeypatch, tmp_path
         users = UserRepository(str(db_path))
         users.put_org("org-1", "Sonar Team")
         users.put_user("user-1", "org-1", "operator", hash_password("pw"), "member")
+        seed_route_test_campaigns(str(db_path))
         s3 = boto3.client("s3", region_name="us-east-1")
         object_store = S3ObjectStore(client=s3, bucket=BUCKET)
         object_store.ensure_bucket()
@@ -1019,3 +1035,112 @@ def test_post_analyses_routes_each_model_id_to_its_gateway(monkeypatch, tmp_path
                 assert gateway.predict_calls == 1
         app.dependency_overrides.clear()
     get_settings.cache_clear()
+
+
+def test_post_analyses_simulated_location_when_coordinates_omitted(analyses_client):
+    client, gateway = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(client, headers, png_bytes(), campaign_id="camp-default")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["campaign"] == {"id": "camp-default", "name": "Test Campaign"}
+    assert body["location"]["source"] == "simulated"
+    assert 38.6 <= body["location"]["lat"] <= 38.7
+    assert -9.5 <= body["location"]["lon"] <= -9.35
+    assert gateway.predict_calls == 1
+
+
+def test_post_analyses_entered_location_inside_area(analyses_client):
+    client, gateway = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(
+        client,
+        headers,
+        png_bytes(),
+        campaign_id="camp-north",
+        latitude=38.65,
+        longitude=-9.42,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["location"] == {"lat": 38.65, "lon": -9.42, "source": "entered"}
+    assert gateway.predict_calls == 1
+
+
+def test_post_analyses_missing_campaign_id_returns_400_before_inference(analyses_client):
+    client, gateway = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(client, headers, png_bytes(), campaign_id=_OMIT_CAMPAIGN)
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "campaign_id is required"
+    assert gateway.predict_calls == 0
+
+
+def test_post_analyses_half_coordinate_pair_returns_400_before_inference(analyses_client):
+    client, gateway = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(
+        client,
+        headers,
+        png_bytes(),
+        campaign_id="camp-default",
+        latitude=38.65,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "latitude and longitude must be sent together"
+    assert gateway.predict_calls == 0
+
+
+def test_post_analyses_outside_campaign_area_returns_400_before_inference(analyses_client):
+    client, gateway = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(
+        client,
+        headers,
+        png_bytes(),
+        campaign_id="camp-default",
+        latitude=40.0,
+        longitude=-9.42,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "position is outside the campaign area"
+    assert gateway.predict_calls == 0
+
+
+def test_post_analyses_cross_org_campaign_returns_404_before_inference(analyses_client):
+    client, gateway = analyses_client
+    headers = auth_headers(client, "operator")
+
+    response = post_image(client, headers, png_bytes(), campaign_id="camp-org-2")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "CAMPAIGN_NOT_FOUND"
+    assert gateway.predict_calls == 0
+
+
+def test_post_analyses_get_returns_same_location(analyses_client):
+    client, _ = analyses_client
+    headers = auth_headers(client, "operator")
+
+    created = post_image(
+        client,
+        headers,
+        png_bytes(),
+        campaign_id="camp-north",
+        latitude=38.61,
+        longitude=-9.49,
+    ).json()
+
+    detail = client.get(f"/analyses/{created['id']}", headers=headers).json()
+
+    assert detail["location"] == created["location"]

@@ -3,6 +3,7 @@ from datetime import datetime
 from app.core.config import get_settings
 from app.core.errors import AnalysisNotFoundError, ValidationError
 from app.repositories.analyses import DEFAULT_LIST_LIMIT, AnalysisRepository
+from app.repositories.campaigns import CampaignRepository
 from app.repositories.s3_store import DEFAULT_PRESIGN_EXPIRES_SECONDS, S3ObjectStore
 from app.schemas.analysis import (
     ActiveCampaign,
@@ -27,11 +28,13 @@ class HistoryService:
         self,
         repository: AnalysisRepository | None = None,
         object_store: S3ObjectStore | None = None,
+        campaign_repository: CampaignRepository | None = None,
         presign_expires_seconds: int = DEFAULT_PRESIGN_EXPIRES_SECONDS,
         list_scan_cap: int | None = None,
     ) -> None:
         self.repository = repository or AnalysisRepository()
         self.object_store = object_store or S3ObjectStore()
+        self.campaign_repository = campaign_repository or CampaignRepository()
         self.presign_expires_seconds = presign_expires_seconds
         self.list_scan_cap = list_scan_cap or get_settings().list_scan_cap
 
@@ -101,12 +104,7 @@ class HistoryService:
                 active_campaign=None,
             )
 
-        active_campaign = None
-        for item in records:
-            campaign_name = item.get("campaign_name")
-            if campaign_name:
-                active_campaign = ActiveCampaign(id=None, name=campaign_name)
-                break
+        active_campaign = self._resolve_active_campaign(org_id, records)
 
         return OrgStatsResponse(
             analyses_count=len(records),
@@ -126,14 +124,33 @@ class HistoryService:
             return None
         return stripped.casefold()
 
-    @staticmethod
-    def _matches_q(record: dict, q_fold: str | None) -> bool:
+    def _matches_q(self, record: dict, q_fold: str | None) -> bool:
         if q_fold is None:
             return True
         if q_fold in record["id"].casefold():
             return True
+        campaign_ref = self._record_campaign_ref(record)
+        if campaign_ref is not None and q_fold in campaign_ref.name.casefold():
+            return True
         campaign_name = record.get("campaign_name") or ""
         return q_fold in campaign_name.casefold()
+
+    def _resolve_active_campaign(
+        self,
+        org_id: str,
+        records: list[dict],
+    ) -> ActiveCampaign | None:
+        for item in records:
+            campaign_id = item.get("campaign_id")
+            if campaign_id:
+                row = self.campaign_repository.get_campaign(org_id, campaign_id)
+                if row is not None:
+                    return ActiveCampaign(id=campaign_id, name=row["name"])
+        for item in records:
+            campaign_name = item.get("campaign_name")
+            if campaign_name:
+                return ActiveCampaign(id=None, name=campaign_name)
+        return None
 
     @staticmethod
     def _matches_class(record: dict, class_filter: PrimaryClass | None) -> bool:
@@ -155,14 +172,14 @@ class HistoryService:
         ]
         return suppress_overlapping(parsed)
 
-    @staticmethod
-    def _record_campaign_ref(record: dict):
+    def _record_campaign_ref(self, record: dict):
         from app.schemas.analysis import CampaignRef
 
         campaign_id = record.get("campaign_id")
-        campaign_name = record.get("campaign_name_linked") or record.get("campaign_name")
-        if campaign_id and campaign_name:
-            return CampaignRef(id=campaign_id, name=campaign_name)
+        if campaign_id:
+            row = self.campaign_repository.get_campaign(record["org_id"], campaign_id)
+            if row is not None:
+                return CampaignRef(id=campaign_id, name=row["name"])
         return None
 
     @staticmethod

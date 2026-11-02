@@ -300,8 +300,8 @@ T9 → T10 → T11
 
 **Done when**:
 
-- [ ] Integration tests: simulated 200, entered 200, missing campaign 400, half pair 400, outside 400, cross-org 404, GET after create returns same location
-- [ ] Gate check passes: `python -m pytest tests/unit tests/integration -q`
+- [x] Integration tests: simulated 200, entered 200, missing campaign 400, half pair 400, outside 400, cross-org 404, GET after create returns same location
+- [x] Gate check passes: `python -m pytest tests/unit tests/integration -q`
 
 **Tests**: integration
 **Gate**: full

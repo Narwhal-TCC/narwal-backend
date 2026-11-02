@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from app.bootstrap.seed import run_seed
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError
 from app.main import app
+from app.repositories.campaigns import CampaignRepository
 from app.services.gateway_pool import GatewayPool
 from app.services.model_gateway import FakeModelGateway
 
@@ -41,6 +43,40 @@ def production_bootstrap(monkeypatch):
     """Run the real app.main.bootstrap (autouse stub replaces it for most tests)."""
     monkeypatch.setattr(main_module, "bootstrap", _production_bootstrap)
     yield _production_bootstrap
+
+
+ROUTE_TEST_CAMPAIGN_AREA = {
+    "min_lat": 38.6,
+    "max_lat": 38.7,
+    "min_lon": -9.5,
+    "max_lon": -9.35,
+}
+
+
+def seed_route_test_campaigns(db_path: str) -> None:
+    repo = CampaignRepository(db_path)
+    created_at = datetime(2026, 9, 1, tzinfo=UTC).isoformat()
+    for org_id, campaign_id, name in [
+        ("org-1", "camp-default", "Test Campaign"),
+        ("org-1", "camp-north", "North Survey"),
+        ("org-1", "camp-south", "South Run"),
+        ("org-1", "camp-alpha", "Alpha"),
+        ("org-1", "camp-beta", "Beta"),
+        ("org-1", "camp-older", "Older Run"),
+        ("org-1", "camp-newer", "Newer Run"),
+        ("org-1", "camp-persist", "Persist Survey"),
+        ("org-2", "camp-org-2", "Rival Campaign"),
+        ("platform", "camp-platform", "Platform Campaign"),
+        ("wiring-org", "camp-wiring", "Wiring Campaign"),
+    ]:
+        repo.put_campaign(
+            campaign_id=campaign_id,
+            org_id=org_id,
+            name=name,
+            simulated=True,
+            created_at=created_at,
+            **ROUTE_TEST_CAMPAIGN_AREA,
+        )
 
 
 def gateway_pool_for(gateway: FakeModelGateway) -> GatewayPool:

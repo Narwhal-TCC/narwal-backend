@@ -17,7 +17,7 @@ from app.main import app
 from app.repositories.s3_store import S3ObjectStore
 from app.repositories.users import UserRepository
 from app.services.model_gateway import FakeModelGateway
-from tests.conftest import gateway_pool_for
+from tests.conftest import gateway_pool_for, seed_route_test_campaigns
 
 
 def png_bytes() -> bytes:
@@ -45,6 +45,7 @@ def wired_client(monkeypatch, tmp_path):
     monkeypatch.delenv("S3_PUBLIC_ENDPOINT", raising=False)
     get_settings.cache_clear()
     _clear_dependency_caches()
+    seed_route_test_campaigns(str(tmp_path / "wiring.db"))
     with mock_aws():
         s3 = boto3.client("s3", region_name="us-east-1")
         store = S3ObjectStore(client=s3, bucket="wiring-test")
@@ -90,6 +91,7 @@ def test_smoke_login_then_analyze_then_list(wired_client):
         "/analyses",
         headers=headers,
         files={"file": ("sonar.png", png_bytes(), "image/png")},
+        data={"campaign_id": "camp-wiring"},
     )
     assert analyze.status_code == 200
     created = analyze.json()

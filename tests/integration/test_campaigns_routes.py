@@ -1,11 +1,8 @@
 from datetime import UTC, datetime
-from io import BytesIO
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_aws
-from PIL import Image
 
 from app.api.deps import get_campaign_service, get_user_repository
 from app.core.config import get_settings
