@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from app.core.errors import (
     AnalysisNotFoundError,
     AppError,
+    CampaignConflictError,
     CampaignNotFoundError,
     InferenceTimeoutError,
     InvalidCredentialsError,
@@ -73,6 +74,15 @@ def test_campaign_not_found_returns_404_with_code_and_default_message():
     assert body["message"] == "Campaign not found"
 
 
+def test_campaign_conflict_returns_409_with_code_and_message():
+    client = _client_for(CampaignConflictError("campaign name already exists"))
+    response = client.get("/raise")
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "CAMPAIGN_CONFLICT"
+    assert body["message"] == "campaign name already exists"
+
+
 def test_all_error_codes_have_expected_status():
     cases = [
         (InvalidCredentialsError(), 401, "INVALID_CREDENTIALS"),
@@ -84,6 +94,7 @@ def test_all_error_codes_have_expected_status():
         (StoreUnavailableError(), 503, "STORE_UNAVAILABLE"),
         (AnalysisNotFoundError(), 404, "ANALYSIS_NOT_FOUND"),
         (CampaignNotFoundError(), 404, "CAMPAIGN_NOT_FOUND"),
+        (CampaignConflictError(), 409, "CAMPAIGN_CONFLICT"),
     ]
     for error, status, code in cases:
         client = _client_for(error)
