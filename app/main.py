@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 from app.api.deps import get_gateway_pool
 from app.api.routes.analyses import router as analyses_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.campaigns import router as campaigns_router
 from app.api.routes.models import router as models_router
 from app.bootstrap.seed import run_seed, seed_v2_model_artifacts, seed_v3_fusion_model_artifacts
 from app.core.config import get_settings
@@ -61,6 +62,7 @@ app = FastAPI(title="Narwal API", version="0.1.0", lifespan=lifespan)
 register_error_handlers(app)
 app.include_router(auth_router)
 app.include_router(models_router)
+app.include_router(campaigns_router)
 app.include_router(analyses_router)
 
 

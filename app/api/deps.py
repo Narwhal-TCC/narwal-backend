@@ -13,6 +13,7 @@ from app.services.ai_analyst import AiAnalyst
 from app.services.analyze import AnalyzeService
 from app.services.auth import AuthService
 from app.services.gateway_pool import GatewayPool
+from app.services.campaigns import CampaignService
 from app.services.history import HistoryService
 from app.services.model_gateway import ModelGateway
 
@@ -93,3 +94,7 @@ def get_history_service(
     repository: AnalysisRepository = Depends(get_analysis_repository),
 ) -> HistoryService:
     return HistoryService(repository=repository, object_store=object_store)
+
+
+def get_campaign_service() -> CampaignService:
+    return CampaignService()

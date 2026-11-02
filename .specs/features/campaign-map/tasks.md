@@ -276,8 +276,8 @@ T9 → T10 → T11
 
 **Done when**:
 
-- [ ] Integration tests: 200 list, 200 empty, 401, points 200, points empty, points cross-org 404
-- [ ] Gate check passes: `python -m pytest tests/unit tests/integration -q`
+- [x] Integration tests: 200 list, 200 empty, 401, points 200, points empty, points cross-org 404
+- [x] Gate check passes: `python -m pytest tests/unit tests/integration -q`
 
 **Tests**: integration
 **Gate**: full
