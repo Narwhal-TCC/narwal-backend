@@ -252,8 +252,8 @@ T9 → T10 → T11
 
 **Done when**:
 
-- [ ] Empty campaign returns `points: []`; unknown campaign raises
-- [ ] Gate check passes: `python -m pytest tests/unit -q`
+- [x] Empty campaign returns `points: []`; unknown campaign raises
+- [x] Gate check passes: `python -m pytest tests/unit -q`
 
 **Tests**: unit
 **Gate**: quick
