@@ -23,7 +23,6 @@ from app.services.analyze import MAX_IMAGE_BYTES, AnalyzeService
 from app.services.gateway_pool import GatewayPool
 from app.services.model_gateway import FakeModelGateway
 
-
 DEFAULT_CAMPAIGN_ID = "camp-1"
 DEFAULT_CAMPAIGN = {
     "campaign_id": DEFAULT_CAMPAIGN_ID,

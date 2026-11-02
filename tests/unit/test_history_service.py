@@ -1,6 +1,7 @@
 import pytest
 
 from app.core.errors import AnalysisNotFoundError, ValidationError
+from app.schemas.analysis import ActiveCampaign
 from app.services.history import HistoryService
 
 DETECTIONS = [
@@ -22,6 +23,7 @@ def record(
     *,
     primary_class: str | None = "NOMBO",
     campaign_name: str | None = None,
+    campaign_id: str | None = None,
     review_status: str = "pending",
     milco_detection_count: int = 0,
     coordinates: str | None = None,
@@ -48,7 +50,17 @@ def record(
     }
     if model_id is not None:
         payload["model_id"] = model_id
+    if campaign_id is not None:
+        payload["campaign_id"] = campaign_id
     return payload
+
+
+class FakeCampaignRepository:
+    def __init__(self, campaigns: dict[tuple[str, str], dict] | None = None) -> None:
+        self._campaigns = campaigns or {}
+
+    def get_campaign(self, org_id: str, campaign_id: str) -> dict | None:
+        return self._campaigns.get((org_id, campaign_id))
 
 
 class FakeAnalysisRepository:
@@ -85,10 +97,15 @@ class FakeObjectStore:
         return f"http://localhost:9000/narwal/{key}?X-Amz-Expires={expires_seconds}"
 
 
-def build_service(records: list[dict], list_scan_cap: int = 500) -> HistoryService:
+def build_service(
+    records: list[dict],
+    list_scan_cap: int = 500,
+    campaigns: dict[tuple[str, str], dict] | None = None,
+) -> HistoryService:
     return HistoryService(
         repository=FakeAnalysisRepository(records),
         object_store=FakeObjectStore(),
+        campaign_repository=FakeCampaignRepository(campaigns),
         list_scan_cap=list_scan_cap,
     )
 
@@ -422,6 +439,73 @@ def test_get_list_and_stats_last_analysis_return_stored_model_id():
     assert summary.model_id == "two-stage-pt"
     assert stats.last_analysis is not None
     assert stats.last_analysis.model_id == "two-stage-pt"
+
+
+def test_get_org_stats_active_campaign_from_newest_linked_record():
+    campaigns = {
+        ("org-1", "camp-alpha"): {"campaign_id": "camp-alpha", "name": "Alpha"},
+        ("org-1", "camp-beta"): {"campaign_id": "camp-beta", "name": "Beta"},
+    }
+    service = build_service(
+        [
+            record(
+                "an-2",
+                "org-1",
+                campaign_id="camp-beta",
+                created_at="2026-09-14T12:00:00+00:00",
+            ),
+            record(
+                "an-1",
+                "org-1",
+                campaign_id="camp-alpha",
+                created_at="2026-09-13T12:00:00+00:00",
+            ),
+        ],
+        campaigns=campaigns,
+    )
+
+    stats = service.get_org_stats("org-1")
+
+    assert stats.active_campaign is not None
+    assert stats.active_campaign.id == "camp-beta"
+    assert stats.active_campaign.name == "Beta"
+
+
+def test_get_org_stats_active_campaign_legacy_name_when_no_campaign_id():
+    service = build_service(
+        [
+            record("an-1", "org-1", campaign_name="Legacy Survey"),
+        ]
+    )
+
+    stats = service.get_org_stats("org-1")
+
+    assert stats.active_campaign == ActiveCampaign(id=None, name="Legacy Survey")
+
+
+def test_get_org_stats_active_campaign_null_when_no_campaign_signal():
+    service = build_service([record("an-1", "org-1", campaign_name="")])
+
+    stats = service.get_org_stats("org-1")
+
+    assert stats.active_campaign is None
+
+
+def test_list_q_matches_linked_campaign_name():
+    campaigns = {
+        ("org-1", "camp-north"): {"campaign_id": "camp-north", "name": "North Survey"},
+    }
+    service = build_service(
+        [
+            record("an-1", "org-1", campaign_id="camp-north"),
+            record("an-2", "org-1", campaign_name="South Run"),
+        ],
+        campaigns=campaigns,
+    )
+
+    page = service.list_analyses("org-1", q="north")
+
+    assert [item.id for item in page.items] == ["an-1"]
 
 
 def test_history_without_model_id_on_record_defaults_to_two_stage_pt():

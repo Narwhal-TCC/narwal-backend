@@ -324,8 +324,8 @@ T9 → T10 → T11
 
 **Done when**:
 
-- [ ] Unit tests for spec "Active campaign" AC 1-4
-- [ ] Gate check passes: `python -m ruff check app tests; python -m pytest tests/unit tests/integration -q`
+- [x] Unit tests for spec "Active campaign" AC 1-4
+- [x] Gate check passes: `python -m ruff check app tests; python -m pytest tests/unit tests/integration -q`
 
 **Tests**: unit
 **Gate**: build
