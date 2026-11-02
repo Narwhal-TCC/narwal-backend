@@ -143,7 +143,7 @@ class CampaignService:
 
     @staticmethod
     def _to_point(record: dict) -> CampaignPoint:
-        detections = record.get("detections") or []
+        raw_detections = record.get("detections") or []
         primary = record.get("primary_class")
         return CampaignPoint(
             analysis_id=record["id"],
@@ -151,10 +151,32 @@ class CampaignService:
             lon=float(record["longitude"]),
             location_source=record["location_source"],  # type: ignore[arg-type]
             primary_class=primary if primary in {"MILCO", "NOMBO"} else None,
+            primary_confidence=_primary_confidence_from_raw(raw_detections),
             milco_detection_count=int(record.get("milco_detection_count") or 0),
-            detection_count=len(detections),
+            detection_count=len(raw_detections),
             created_at=datetime.fromisoformat(record["created_at"]),
         )
+
+
+def _primary_confidence_from_raw(raw_detections: list) -> float | None:
+    scored: list[tuple[str, float]] = []
+    for row in raw_detections:
+        if not isinstance(row, dict):
+            continue
+        label = row.get("label")
+        confidence = row.get("confidence")
+        if label not in {"MILCO", "NOMBO"} or confidence is None:
+            continue
+        try:
+            scored.append((label, float(confidence)))
+        except (TypeError, ValueError):
+            continue
+    if not scored:
+        return None
+    milco_scores = [value for label, value in scored if label == "MILCO"]
+    if milco_scores:
+        return max(milco_scores)
+    return max(value for _, value in scored)
 
 
 def _validate_name(raw: str) -> str:

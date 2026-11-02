@@ -1,7 +1,11 @@
 from typing import Literal
 
 from app.schemas.analysis import Detection
-from app.services.primary_class import compute_primary_class, count_milco
+from app.services.primary_class import (
+    compute_primary_class,
+    compute_primary_confidence,
+    count_milco,
+)
 
 DetectionLabel = Literal["MILCO", "NOMBO"]
 
@@ -20,6 +24,7 @@ def _detection(label: DetectionLabel, confidence: float) -> Detection:
 
 def test_empty_detections_yield_null_primary_class():
     assert compute_primary_class([]) is None
+    assert compute_primary_confidence([]) is None
     assert count_milco([]) == 0
 
 
@@ -30,6 +35,7 @@ def test_any_milco_detection_sets_primary_class_to_milco():
     ]
 
     assert compute_primary_class(detections) == "MILCO"
+    assert compute_primary_confidence(detections) == 0.1
     assert count_milco(detections) == 1
 
 
@@ -40,6 +46,7 @@ def test_no_milco_uses_highest_confidence_nombo():
     ]
 
     assert compute_primary_class(detections) == "NOMBO"
+    assert compute_primary_confidence(detections) == 0.9
     assert count_milco(detections) == 0
 
 

@@ -152,7 +152,17 @@ def test_get_points_maps_positioned_analyses():
                 "location_source": "simulated",
                 "primary_class": "MILCO",
                 "milco_detection_count": 1,
-                "detections": [{"label": "MILCO"}],
+                "detections": [
+                    {
+                        "x1": 0,
+                        "y1": 0,
+                        "x2": 10,
+                        "y2": 10,
+                        "label": "MILCO",
+                        "confidence": 0.91,
+                        "detector_score": 0.91,
+                    }
+                ],
                 "created_at": "2026-09-13T12:00:00+00:00",
             }
         ]
@@ -169,6 +179,7 @@ def test_get_points_maps_positioned_analyses():
     assert point.primary_class == "MILCO"
     assert point.milco_detection_count == 1
     assert point.detection_count == 1
+    assert point.primary_confidence == 0.91
     assert point.created_at == datetime(2026, 9, 13, 12, 0, tzinfo=UTC)
 
 

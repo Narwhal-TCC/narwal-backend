@@ -17,3 +17,13 @@ def compute_primary_class(detections: Sequence[Detection]) -> PrimaryClass | Non
         return "MILCO"
     best = max(detections, key=lambda detection: detection.confidence)
     return best.label
+
+
+def compute_primary_confidence(detections: Sequence[Detection]) -> float | None:
+    if not detections:
+        return None
+    if count_milco(detections) > 0:
+        milco = [detection for detection in detections if detection.label == "MILCO"]
+        return max(detection.confidence for detection in milco)
+    best = max(detections, key=lambda detection: detection.confidence)
+    return best.confidence
