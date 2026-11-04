@@ -78,6 +78,12 @@ class CampaignNotFoundError(AppError):
     default_message = "Campaign not found"
 
 
+class CampaignConflictError(AppError):
+    code = "CAMPAIGN_CONFLICT"
+    status_code = 409
+    default_message = "campaign conflict"
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def handle_app_error(_request: Request, exc: AppError) -> JSONResponse:

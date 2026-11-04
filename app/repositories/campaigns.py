@@ -97,11 +97,17 @@ class CampaignRepository:
         try:
             row = conn.execute(
                 """
-                SELECT campaign_id, org_id, name,
-                       min_lat, max_lat, min_lon, max_lon,
-                       simulated, created_at
-                FROM campaigns
-                WHERE org_id = ? AND campaign_id = ?
+                SELECT c.campaign_id, c.org_id, c.name,
+                       c.min_lat, c.max_lat, c.min_lon, c.max_lon,
+                       c.simulated, c.created_at,
+                       COUNT(a.analysis_id) AS analyses_count
+                FROM campaigns c
+                LEFT JOIN analyses a
+                  ON a.org_id = c.org_id AND a.campaign_id = c.campaign_id
+                WHERE c.org_id = ? AND c.campaign_id = ?
+                GROUP BY c.campaign_id, c.org_id, c.name,
+                         c.min_lat, c.max_lat, c.min_lon, c.max_lon,
+                         c.simulated, c.created_at
                 """,
                 (org_id, campaign_id),
             ).fetchone()

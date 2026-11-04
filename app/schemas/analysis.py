@@ -78,6 +78,7 @@ class CampaignPoint(BaseModel):
     lon: float
     location_source: LocationSource
     primary_class: PrimaryClass | None = None
+    primary_confidence: float | None = None
     milco_detection_count: int
     detection_count: int
     created_at: datetime
