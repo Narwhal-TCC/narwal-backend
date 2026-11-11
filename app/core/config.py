@@ -93,6 +93,37 @@ class Settings(BaseSettings):
         alias="CONVNEXT_LOCAL_PATHS",
     )
 
+    yolo_g5v2_s3_uri: str = Field(
+        default="s3://narwal/models/v2/G5_best_v2.pt",
+        alias="YOLO_G5V2_S3_URI",
+    )
+    yolo_g5v2_local_path: str | None = Field(
+        default="data/models/v2/G5_best_v2.pt",
+        alias="YOLO_G5V2_LOCAL_PATH",
+    )
+    yolo_g5v2_ensemble_s3_uris: str = Field(
+        default=(
+            "s3://narwal/models/v3/solo_convnext_pico_s42.pt,"
+            "s3://narwal/models/v3/solo_convnext_pico_s43.pt,"
+            "s3://narwal/models/v3/solo_convnext_pico_s44.pt,"
+            "s3://narwal/models/v3/solo_mobilevitv2_100_s42.pt,"
+            "s3://narwal/models/v3/solo_mobilevitv2_100_s43.pt,"
+            "s3://narwal/models/v3/solo_mobilevitv2_100_s44.pt"
+        ),
+        alias="YOLO_G5V2_ENSEMBLE_S3_URIS",
+    )
+    yolo_g5v2_ensemble_local_paths: str | None = Field(
+        default=(
+            "data/models/v3/solo_convnext_pico_s42.pt,"
+            "data/models/v3/solo_convnext_pico_s43.pt,"
+            "data/models/v3/solo_convnext_pico_s44.pt,"
+            "data/models/v3/solo_mobilevitv2_100_s42.pt,"
+            "data/models/v3/solo_mobilevitv2_100_s43.pt,"
+            "data/models/v3/solo_mobilevitv2_100_s44.pt"
+        ),
+        alias="YOLO_G5V2_ENSEMBLE_LOCAL_PATHS",
+    )
+
     # YOLO Model A + ConvNeXt/EdgeNeXt fusion on crops (main / TESTE_CONNEXT_FUSAO)
     yolo_fusion_v3_classifier_s3_uri: str = Field(
         default="s3://narwal/models/v3/fusao_edgenext_small_best.pt",
@@ -147,6 +178,22 @@ def convnext_s3_uri_list(settings: Settings | None = None) -> list[str]:
 def convnext_local_path_list(settings: Settings | None = None) -> list[str]:
     resolved = settings or get_settings()
     raw = resolved.convnext_local_paths
+    if raw is None or raw == "":
+        return []
+    return _split_csv(raw)
+
+
+def g5v2_ensemble_s3_uri_list(settings: Settings | None = None) -> list[str]:
+    resolved = settings or get_settings()
+    uris = _split_csv(resolved.yolo_g5v2_ensemble_s3_uris)
+    if len(uris) != 6:
+        raise ValueError("YOLO_G5V2_ENSEMBLE_S3_URIS must list exactly six classifier URIs")
+    return uris
+
+
+def g5v2_ensemble_local_path_list(settings: Settings | None = None) -> list[str]:
+    resolved = settings or get_settings()
+    raw = resolved.yolo_g5v2_ensemble_local_paths
     if raw is None or raw == "":
         return []
     return _split_csv(raw)
