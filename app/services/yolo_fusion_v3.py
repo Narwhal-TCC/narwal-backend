@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Callable
+from pathlib import PurePosixPath
 from typing import Any
 
 from app.core.config import get_settings
@@ -17,6 +19,8 @@ from app.services.yolo_fusion_v3_models import (
 
 YoloBuilder = Callable[[bytes], Any]
 ClassifierBuilder = Callable[[bytes], Any]
+
+_SOLO_CLASSIFIER_NAME = re.compile(r"^solo_(?P<backbone>.+)_s\d+\.pt$")
 
 
 def _load_fusion_state(payload: bytes) -> dict[str, Any]:
@@ -40,6 +44,29 @@ def mobilevit_fusion_classifier_builder(payload: bytes) -> Any:
     return build_crop_fusion_classifier(
         _load_fusion_state(payload), FUSION_MOBILEVIT_BACKBONE_NAMES
     )
+
+
+def _solo_artifact_basename(artifact_name_or_uri: str) -> str:
+    trimmed = artifact_name_or_uri.split("?", 1)[0]
+    return PurePosixPath(trimmed).name
+
+
+def build_solo_v3_classifier(payload: bytes, artifact_name_or_uri: str) -> Any:
+    """Build a single-backbone CropFusionClassifier from a bare v3 solo checkpoint."""
+    basename = _solo_artifact_basename(artifact_name_or_uri)
+    match = _SOLO_CLASSIFIER_NAME.match(basename)
+    if match is None:
+        raise ModelUnavailableError("Solo classifier artifact name is invalid")
+    backbone = match.group("backbone")
+    state = _load_fusion_state(payload)
+    try:
+        return build_crop_fusion_classifier(state, (backbone,))
+    except Exception as exc:
+        raise ModelUnavailableError("Solo classifier artifact could not be loaded") from exc
+
+
+def solo_v3_classifier_builder(payload: bytes, artifact_uri: str) -> tuple[Any, dict]:
+    return build_solo_v3_classifier(payload, artifact_uri), {}
 
 
 def _import_torch():

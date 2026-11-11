@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,20 @@ from app.core.errors import ModelUnavailableError
 from app.repositories.s3_store import S3ObjectStore
 
 YoloBuilder = Callable[[bytes], Any]
-ClassifierBuilder = Callable[[bytes], tuple[Any, dict]]
+ClassifierBuilder = Callable[..., tuple[Any, dict]]
+G5S3UriFn = Callable[[], str]
+ClassifierS3UrisFn = Callable[[], Sequence[str]]
+
+
+def _invoke_classifier_builder(
+    builder: ClassifierBuilder,
+    payload: bytes,
+    s3_uri: str,
+) -> tuple[Any, dict]:
+    try:
+        return builder(payload, s3_uri)
+    except TypeError:
+        return builder(payload)
 
 
 def _import_ultralytics_yolo():
@@ -123,10 +136,16 @@ class YoloConvnextWeights:
         *,
         yolo_builder: YoloBuilder | None = None,
         classifier_builder: ClassifierBuilder | None = None,
+        g5_s3_uri: G5S3UriFn | None = None,
+        classifier_s3_uris: ClassifierS3UrisFn | None = None,
     ) -> None:
         self.store = store or S3ObjectStore()
         self._yolo_builder = yolo_builder or default_yolo_builder
         self._classifier_builder = classifier_builder or default_classifier_builder
+        self._g5_s3_uri = g5_s3_uri or (lambda: get_settings().yolo_g5_s3_uri)
+        self._classifier_s3_uris = classifier_s3_uris or (
+            lambda: convnext_s3_uri_list()
+        )
         self._lock = threading.Lock()
         self._loaded = False
         self.yolo_g5: Any | None = None
@@ -159,13 +178,17 @@ class YoloConvnextWeights:
 
     def _load_all(self) -> None:
         settings = get_settings()
-        g5_bytes = self.store.download_model(settings.yolo_g5_s3_uri)
+        classifier_uris = list(self._classifier_s3_uris())
+        g5_bytes = self.store.download_model(self._g5_s3_uri())
         yolo_a_bytes = self.store.download_model(settings.yolo_a_s3_uri)
-        convnext_bytes = [self.store.download_model(uri) for uri in convnext_s3_uri_list(settings)]
+        classifier_bytes = [self.store.download_model(uri) for uri in classifier_uris]
 
         self.yolo_g5 = self._yolo_builder(g5_bytes)
         self.yolo_a = self._yolo_builder(yolo_a_bytes)
-        self.classifiers = [self._classifier_builder(payload)[0] for payload in convnext_bytes]
+        self.classifiers = [
+            _invoke_classifier_builder(self._classifier_builder, payload, uri)[0]
+            for uri, payload in zip(classifier_uris, classifier_bytes, strict=True)
+        ]
 
 
 DetectorListsFn = Callable[[Any], list[Any]]

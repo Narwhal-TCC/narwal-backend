@@ -81,6 +81,22 @@ services:
         s3://narwal/models/v2/convnext_pico_224_s42.pt,
         s3://narwal/models/v2/convnext_pico_224_s43.pt,
         s3://narwal/models/v2/convnext_pico_224_s44.pt
+      YOLO_G5V2_LOCAL_PATH: /app/data/models/v2/G5_best_v2.pt
+      YOLO_G5V2_S3_URI: s3://narwal/models/v2/G5_best_v2.pt
+      YOLO_G5V2_ENSEMBLE_LOCAL_PATHS: >-
+        /app/data/models/v3/solo_convnext_pico_s42.pt,
+        /app/data/models/v3/solo_convnext_pico_s43.pt,
+        /app/data/models/v3/solo_convnext_pico_s44.pt,
+        /app/data/models/v3/solo_mobilevitv2_100_s42.pt,
+        /app/data/models/v3/solo_mobilevitv2_100_s43.pt,
+        /app/data/models/v3/solo_mobilevitv2_100_s44.pt
+      YOLO_G5V2_ENSEMBLE_S3_URIS: >-
+        s3://narwal/models/v3/solo_convnext_pico_s42.pt,
+        s3://narwal/models/v3/solo_convnext_pico_s43.pt,
+        s3://narwal/models/v3/solo_convnext_pico_s44.pt,
+        s3://narwal/models/v3/solo_mobilevitv2_100_s42.pt,
+        s3://narwal/models/v3/solo_mobilevitv2_100_s43.pt,
+        s3://narwal/models/v3/solo_mobilevitv2_100_s44.pt
       YOLO_FUSION_V3_CLASSIFIER_LOCAL_PATH: /app/data/models/v3/fusao_edgenext_small_best.pt
       YOLO_FUSION_V3_CLASSIFIER_S3_URI: s3://narwal/models/v3/fusao_edgenext_small_best.pt
       YOLO_FUSION_MOBILEVIT_CLASSIFIER_LOCAL_PATH: /app/data/models/v3/clf_fusao_mobilevitv2_100_s42.pt

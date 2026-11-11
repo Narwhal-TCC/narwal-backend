@@ -9,15 +9,16 @@ from app.services.model_registry import (
 )
 
 
-def test_registry_lists_five_models_in_catalog_order():
+def test_registry_lists_six_models_in_catalog_order():
     models = list_models()
-    assert len(models) == 5
+    assert len(models) == 6
     assert [entry.id for entry in models] == [
         "yolo-convnext-balanced",
         "yolo-convnext-recall",
         "two-stage-pt",
         "yolo-fusion-v3",
         "yolo-fusion-mobilevit",
+        "yolo-g5v2-convnext-mobilevit",
     ]
     balanced = models[0]
     assert balanced.label == "YOLO + ConvNeXt (equilibrado)"
@@ -30,6 +31,19 @@ def test_registry_lists_five_models_in_catalog_order():
     fusion_v3 = models[3]
     assert fusion_v3.id == "yolo-fusion-v3"
     assert fusion_v3.label == "YOLO A + fusão ConvNeXt/EdgeNeXt (v3)"
+    g5v2 = models[5]
+    assert g5v2.is_default is False
+    assert g5v2.label == "YOLO G5 v2 + ConvNeXt/MobileViT"
+    assert "permanece fora do padrão" in g5v2.description
+
+
+def test_comparison_rule_keeps_balanced_as_default():
+    """G5V2-09: 2026-11-11 run on seed labels — balanced recall higher, so no flip."""
+    models = list_models()
+    default_ids = [entry.id for entry in models if entry.is_default]
+    assert default_ids == ["yolo-convnext-balanced"]
+    g5v2 = next(m for m in models if m.id == "yolo-g5v2-convnext-mobilevit")
+    assert g5v2.is_default is False
 
 
 def test_default_model_id_is_balanced_pipeline():
@@ -46,6 +60,7 @@ def test_default_model_id_is_balanced_pipeline():
         ("two-stage-pt", "two-stage-pt"),
         ("yolo-fusion-v3", "yolo-fusion-v3"),
         ("yolo-fusion-mobilevit", "yolo-fusion-mobilevit"),
+        ("yolo-g5v2-convnext-mobilevit", "yolo-g5v2-convnext-mobilevit"),
     ],
 )
 def test_resolve_model_id_accepts_default_and_exact_id(raw, expected):
