@@ -33,7 +33,8 @@ def test_one_gt_matches_at_most_one_prediction():
 
 
 def test_empty_ground_truth_counts_all_predictions_as_false_alarms():
-    metrics = compare_models.metrics_for_image("empty", [], [(0.0, 0.0, 1.0, 1.0), (2.0, 2.0, 3.0, 3.0)])
+    preds = [(0.0, 0.0, 1.0, 1.0), (2.0, 2.0, 3.0, 3.0)]
+    metrics = compare_models.metrics_for_image("empty", [], preds)
     assert metrics.gt_mine_count == 0
     assert metrics.matched_mines == 0
     assert metrics.false_alarms == 2
