@@ -3,7 +3,12 @@ import pytest
 
 from app.core.config import get_settings
 from app.core.errors import ModelUnavailableError
-from app.services.gateway_pool import FUSION_CONF_BY_ID, GatewayPool
+from app.core.config import g5v2_ensemble_s3_uri_list, get_settings
+from app.services.gateway_pool import (
+    FUSION_CONF_BY_ID,
+    YOLO_G5V2_MOBILEVIT_ID,
+    GatewayPool,
+)
 from app.services.model_gateway import FakeModelGateway
 from app.services.yolo_convnext import YoloConvnextGateway, YoloConvnextWeights
 from app.services.yolo_fusion_v3 import YoloFusionV3Gateway
@@ -12,9 +17,12 @@ from app.services.yolo_fusion_v3 import YoloFusionV3Gateway
 class CountingStore:
     def __init__(self) -> None:
         self.downloads: list[str] = []
+        self.failures: set[str] = set()
 
     def download_model(self, s3_uri: str | None = None) -> bytes:
         assert s3_uri is not None
+        if s3_uri in self.failures:
+            raise ModelUnavailableError(f"download failed for {s3_uri}")
         self.downloads.append(s3_uri)
         return b"weights"
 
@@ -108,6 +116,68 @@ def test_pool_builds_fusion_v3_gateway():
     pool = GatewayPool(fusion_v3_weights=NoLoadWeights())  # type: ignore[arg-type]
     gateway = pool.get("yolo-fusion-v3")
     assert isinstance(gateway, YoloFusionV3Gateway)
+
+
+def test_pool_builds_g5v2_gateway_with_separate_weights_and_fusion_conf():
+    pool = GatewayPool(yolo_weights=NoLoadWeights())  # type: ignore[arg-type]
+    gateway = pool.get(YOLO_G5V2_MOBILEVIT_ID)
+    balanced = pool.get("yolo-convnext-balanced")
+
+    assert isinstance(gateway, YoloConvnextGateway)
+    assert gateway.fusion_conf == 0.4
+    assert gateway.weights is not balanced.weights
+    assert gateway.weights is pool._shared_g5v2_weights()
+
+
+def test_balanced_before_g5v2_downloads_no_g5v2_artifacts(monkeypatch):
+    get_settings.cache_clear()
+    store = CountingStore()
+
+    def yolo_builder(_payload: bytes):
+        return object()
+
+    def classifier_builder(_payload: bytes, s3_uri: str | None = None):
+        return object(), {}
+
+    shared = YoloConvnextWeights(
+        store,
+        yolo_builder=yolo_builder,
+        classifier_builder=classifier_builder,
+    )
+    pool = GatewayPool(store, yolo_weights=shared)
+
+    pool.get("yolo-convnext-balanced").ensure_model_loaded()
+    settings = get_settings()
+    g5v2_uris = {settings.yolo_g5v2_s3_uri, *g5v2_ensemble_s3_uri_list(settings)}
+    assert not any(uri in store.downloads for uri in g5v2_uris)
+    get_settings.cache_clear()
+
+
+def test_g5v2_load_failure_leaves_balanced_usable(monkeypatch):
+    get_settings.cache_clear()
+    store = CountingStore()
+    settings = get_settings()
+    store.failures.add(settings.yolo_g5v2_s3_uri)
+
+    def yolo_builder(_payload: bytes):
+        return object()
+
+    def classifier_builder(_payload: bytes, s3_uri: str | None = None):
+        return object(), {}
+
+    balanced_weights = YoloConvnextWeights(
+        store,
+        yolo_builder=yolo_builder,
+        classifier_builder=classifier_builder,
+    )
+    pool = GatewayPool(store, yolo_weights=balanced_weights)
+
+    with pytest.raises(ModelUnavailableError):
+        pool.get(YOLO_G5V2_MOBILEVIT_ID).ensure_model_loaded()
+
+    pool.get("yolo-convnext-balanced").ensure_model_loaded()
+    assert balanced_weights.is_loaded
+    get_settings.cache_clear()
 
 
 def test_pool_builds_mobilevit_fusion_gateway_with_own_classifier(monkeypatch):

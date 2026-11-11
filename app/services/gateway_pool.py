@@ -4,7 +4,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from app.core.config import get_settings
+from app.core.config import g5v2_ensemble_s3_uri_list, get_settings
 from app.repositories.s3_store import S3ObjectStore
 from app.services.model_gateway import ModelGateway, TwoStageTorchGateway
 from app.services.model_registry import DEFAULT_MODEL_ID
@@ -13,6 +13,7 @@ from app.services.yolo_fusion_v3 import (
     YoloFusionV3Gateway,
     YoloFusionV3Weights,
     mobilevit_fusion_classifier_builder,
+    solo_v3_classifier_builder,
 )
 
 YOLO_BALANCED_ID = "yolo-convnext-balanced"
@@ -20,6 +21,7 @@ YOLO_RECALL_ID = "yolo-convnext-recall"
 TWO_STAGE_ID = "two-stage-pt"
 YOLO_FUSION_V3_ID = "yolo-fusion-v3"
 YOLO_FUSION_MOBILEVIT_ID = "yolo-fusion-mobilevit"
+YOLO_G5V2_MOBILEVIT_ID = "yolo-g5v2-convnext-mobilevit"
 
 FUSION_CONF_BY_ID = {
     YOLO_BALANCED_ID: 0.4,
@@ -37,11 +39,13 @@ class GatewayPool:
         store: S3ObjectStore | None = None,
         *,
         yolo_weights: YoloConvnextWeights | None = None,
+        g5v2_weights: YoloConvnextWeights | None = None,
         fusion_v3_weights: YoloFusionV3Weights | None = None,
         gateway_factories: dict[str, GatewayFactory] | None = None,
     ) -> None:
         self._store = store or S3ObjectStore()
         self._yolo_weights = yolo_weights
+        self._g5v2_weights = g5v2_weights
         self._fusion_v3_weights = fusion_v3_weights
         self._gateway_factories = gateway_factories or {}
         self._gateways: dict[str, ModelGateway] = {}
@@ -70,6 +74,17 @@ class GatewayPool:
             self._fusion_v3_weights = YoloFusionV3Weights(self._store)
         return self._fusion_v3_weights
 
+    def _shared_g5v2_weights(self) -> YoloConvnextWeights:
+        if self._g5v2_weights is None:
+            settings = get_settings()
+            self._g5v2_weights = YoloConvnextWeights(
+                self._store,
+                classifier_builder=solo_v3_classifier_builder,
+                g5_s3_uri=lambda: settings.yolo_g5v2_s3_uri,
+                classifier_s3_uris=lambda: g5v2_ensemble_s3_uri_list(settings),
+            )
+        return self._g5v2_weights
+
     def _build(self, model_id: str) -> ModelGateway:
         factory = self._gateway_factories.get(model_id)
         if factory is not None:
@@ -88,6 +103,8 @@ class GatewayPool:
                 classifier_s3_uri=lambda: get_settings().yolo_fusion_mobilevit_classifier_s3_uri,
             )
             return YoloFusionV3Gateway(weights)
+        if model_id == YOLO_G5V2_MOBILEVIT_ID:
+            return YoloConvnextGateway(self._shared_g5v2_weights(), 0.4)
         raise KeyError(f"Unregistered model id: {model_id}")
 
     def preload_default(self) -> Any:
