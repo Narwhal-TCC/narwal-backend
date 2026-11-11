@@ -57,6 +57,14 @@ REGISTRY: tuple[RegisteredModel, ...] = (
         ),
         is_default=False,
     ),
+    RegisteredModel(
+        id="yolo-g5v2-convnext-mobilevit",
+        label="YOLO G5 v2 + ConvNeXt/MobileViT",
+        description=(
+            "G5 re-treinado com ensemble ConvNeXt/MobileViT nos recortes; em avaliação."
+        ),
+        is_default=False,
+    ),
 )
 
 
