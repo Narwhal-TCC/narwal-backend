@@ -1,6 +1,12 @@
 from datetime import UTC, datetime
 
-from app.core.config import convnext_local_path_list, convnext_s3_uri_list, get_settings
+from app.core.config import (
+    convnext_local_path_list,
+    convnext_s3_uri_list,
+    g5v2_ensemble_local_path_list,
+    g5v2_ensemble_s3_uri_list,
+    get_settings,
+)
 from app.core.security import hash_password
 from app.repositories.campaigns import CampaignRepository, new_campaign_id
 from app.repositories.s3_store import S3ObjectStore
@@ -31,6 +37,21 @@ def seed_v3_fusion_model_artifacts(store: S3ObjectStore | None = None) -> None:
             settings.yolo_fusion_mobilevit_classifier_s3_uri,
         ),
     ]
+    for local_path, s3_uri in pairs:
+        if local_path:
+            s3.seed_model_if_missing(local_path, s3_uri)
+
+
+def seed_g5v2_model_artifacts(store: S3ObjectStore | None = None) -> None:
+    """Upload local G5 v2 and v3 solo ensemble weights when absent from object storage."""
+    settings = get_settings()
+    s3 = store or S3ObjectStore()
+    pairs: list[tuple[str | None, str]] = [
+        (settings.yolo_g5v2_local_path, settings.yolo_g5v2_s3_uri),
+    ]
+    local_paths = g5v2_ensemble_local_path_list(settings)
+    s3_uris = g5v2_ensemble_s3_uri_list(settings)
+    pairs.extend(zip(local_paths, s3_uris, strict=True))
     for local_path, s3_uri in pairs:
         if local_path:
             s3.seed_model_if_missing(local_path, s3_uri)

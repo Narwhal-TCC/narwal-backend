@@ -10,7 +10,12 @@ from app.api.routes.analyses import router as analyses_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.campaigns import router as campaigns_router
 from app.api.routes.models import router as models_router
-from app.bootstrap.seed import run_seed, seed_v2_model_artifacts, seed_v3_fusion_model_artifacts
+from app.bootstrap.seed import (
+    run_seed,
+    seed_g5v2_model_artifacts,
+    seed_v2_model_artifacts,
+    seed_v3_fusion_model_artifacts,
+)
 from app.bootstrap.seed_demo_analyses import seed_demo_campaign_analyses
 from app.core.config import get_settings
 from app.core.errors import StoreUnavailableError, register_error_handlers
@@ -38,6 +43,7 @@ def bootstrap() -> None:
         ):
             logger.info("Uploaded local classifier artifact to object storage")
         seed_v2_model_artifacts(store)
+        seed_g5v2_model_artifacts(store)
         seed_v3_fusion_model_artifacts(store)
     except Exception:
         logger.warning("Could not seed model artifacts to object storage", exc_info=True)
