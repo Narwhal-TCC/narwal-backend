@@ -1,9 +1,8 @@
 import numpy as np
 import pytest
 
-from app.core.config import get_settings
-from app.core.errors import ModelUnavailableError
 from app.core.config import g5v2_ensemble_s3_uri_list, get_settings
+from app.core.errors import ModelUnavailableError
 from app.services.gateway_pool import (
     FUSION_CONF_BY_ID,
     YOLO_G5V2_MOBILEVIT_ID,

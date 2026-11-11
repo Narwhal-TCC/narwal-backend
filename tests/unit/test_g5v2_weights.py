@@ -15,6 +15,8 @@ from app.services.yolo_convnext import (
     YoloConvnextGateway,
     YoloConvnextWeights,
 )
+
+
 class CountingStore:
     def __init__(self) -> None:
         self.downloads: list[str] = []
